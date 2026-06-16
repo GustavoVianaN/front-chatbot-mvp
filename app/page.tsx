@@ -122,9 +122,9 @@ export default function Home() {
       <div className="fixed inset-y-0 left-0 hidden w-72 border-r border-slate-800 bg-slate-950/98 backdrop-blur-xl lg:block">
         <Sidebar sections={sections} activeSection={activeSection} onChange={handleChangeSection} companyName={companyName} />
       </div>
-      <main className="min-h-screen lg:ml-72">
+      <main className="min-h-screen w-full lg:ml-72">
         <Topbar companyName={companyName} userName="Admin" status={dashboard?.botEnabled ? 'Ativo' : 'Pausado'} whatsappConnected={whatsappStatus?.tokenConfigured ? 'Conectado' : 'Aguardando'} onLogout={handleLogout} />
-        <div className="px-4 pb-10 pt-4 sm:px-6 sm:pt-6">
+        <div className="max-w-full px-4 pb-10 pt-4 sm:px-6 sm:pt-6">
           {pending && (
             <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-300">
               Carregando dados...

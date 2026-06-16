@@ -58,7 +58,7 @@ export default function ConversationPanel({ conversation, onReply, onUpdateStatu
         </div>
       </div>
 
-      <div className="min-h-[340px] flex-1 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 p-3 sm:rounded-3xl sm:p-4">
+      <div className="min-h-[240px] flex-1 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 p-3 sm:min-h-[340px] sm:rounded-3xl sm:p-4">
         <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1 sm:gap-4 sm:pr-2">
           {loading ? (
             <div className="mt-8 text-center text-slate-400">Carregando mensagens...</div>
