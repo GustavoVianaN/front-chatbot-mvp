@@ -1,5 +1,6 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import type {
   BotConfig,
   Conversation,
@@ -11,17 +12,20 @@ import type {
 } from './types';
 
 const DEFAULT_BACKEND_API_URL = 'http://localhost:3000/api';
+const AUTH_COOKIE = 'chatbot_admin_token';
 
 function getBackendApiUrl() {
   return (process.env.BACKEND_API_URL || DEFAULT_BACKEND_API_URL).replace(/\/$/, '');
 }
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = cookies().get(AUTH_COOKIE)?.value;
   const response = await fetch(`${getBackendApiUrl()}${path}`, {
     ...init,
     cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });
@@ -32,6 +36,57 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function login(username: string, password: string) {
+  const response = await fetch(`${getBackendApiUrl()}/auth/login`, {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!response.ok) {
+    return { success: false, error: 'Usuário ou senha inválidos.' };
+  }
+
+  const payload = (await response.json()) as {
+    token: string;
+    user: { username: string; role: string };
+  };
+
+  cookies().set(AUTH_COOKIE, payload.token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 60 * 8,
+  });
+
+  return { success: true, user: payload.user };
+}
+
+export async function logout() {
+  cookies().delete(AUTH_COOKIE);
+  return { success: true };
+}
+
+export async function getAuthState() {
+  const token = cookies().get(AUTH_COOKIE)?.value;
+
+  if (!token) {
+    return { authenticated: false };
+  }
+
+  try {
+    await apiRequest('/auth/me');
+    return { authenticated: true };
+  } catch {
+    cookies().delete(AUTH_COOKIE);
+    return { authenticated: false };
+  }
 }
 
 export async function getDashboard(): Promise<DashboardSummary> {

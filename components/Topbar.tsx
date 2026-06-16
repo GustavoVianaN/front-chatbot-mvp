@@ -3,9 +3,10 @@ type TopbarProps = {
   userName: string;
   status: string;
   whatsappConnected?: string;
+  onLogout?: () => void;
 };
 
-export default function Topbar({ companyName, userName, status, whatsappConnected }: TopbarProps) {
+export default function Topbar({ companyName, userName, status, whatsappConnected, onLogout }: TopbarProps) {
   return (
     <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 px-6 py-4 backdrop-blur-xl">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -23,6 +24,11 @@ export default function Topbar({ companyName, userName, status, whatsappConnecte
           <div className="rounded-2xl border border-slate-800 bg-slate-900/80 px-3 py-2">
             Usuário: <span className="font-semibold text-white">{userName}</span>
           </div>
+          {onLogout && (
+            <button type="button" onClick={onLogout} className="rounded-2xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-slate-200 transition hover:border-slate-500 hover:text-white">
+              Sair
+            </button>
+          )}
         </div>
       </div>
     </header>
