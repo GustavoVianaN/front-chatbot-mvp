@@ -15,11 +15,16 @@ const DEFAULT_BACKEND_API_URL = 'http://localhost:3000/api';
 const AUTH_COOKIE = 'chatbot_admin_token';
 
 function getBackendApiUrl() {
+  if (!process.env.BACKEND_API_URL && process.env.NODE_ENV === 'production') {
+    throw new Error('BACKEND_API_URL is required');
+  }
+
   return (process.env.BACKEND_API_URL || DEFAULT_BACKEND_API_URL).replace(/\/$/, '');
 }
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = cookies().get(AUTH_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(AUTH_COOKIE)?.value;
   const response = await fetch(`${getBackendApiUrl()}${path}`, {
     ...init,
     cache: 'no-store',
@@ -31,8 +36,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Backend request failed with status ${response.status}`);
+    throw new Error(response.status === 401 ? 'Sessão expirada.' : 'Não foi possível concluir a operação.');
   }
 
   return response.json() as Promise<T>;
@@ -57,9 +61,10 @@ export async function login(username: string, password: string) {
     user: { username: string; role: string };
   };
 
-  cookies().set(AUTH_COOKIE, payload.token, {
+  const cookieStore = await cookies();
+  cookieStore.set(AUTH_COOKIE, payload.token, {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'strict',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: 60 * 60 * 8,
@@ -69,12 +74,14 @@ export async function login(username: string, password: string) {
 }
 
 export async function logout() {
-  cookies().delete(AUTH_COOKIE);
+  const cookieStore = await cookies();
+  cookieStore.delete(AUTH_COOKIE);
   return { success: true };
 }
 
 export async function getAuthState() {
-  const token = cookies().get(AUTH_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(AUTH_COOKIE)?.value;
 
   if (!token) {
     return { authenticated: false };
@@ -84,7 +91,7 @@ export async function getAuthState() {
     await apiRequest('/auth/me');
     return { authenticated: true };
   } catch {
-    cookies().delete(AUTH_COOKIE);
+    cookieStore.delete(AUTH_COOKIE);
     return { authenticated: false };
   }
 }

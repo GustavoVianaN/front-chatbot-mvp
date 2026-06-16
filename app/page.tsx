@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Bookmark,
   CheckCircle2,
@@ -17,7 +17,7 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
-import { getAuthState, getBotConfig, getConversations, getDashboard, getKnowledge, getSettings, getWhatsappStatus, login, logout, replyToConversation, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import { getBotConfig, getConversations, getDashboard, getKnowledge, getSettings, getWhatsappStatus, logout, replyToConversation, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
 import type { BotConfig, Conversation, KnowledgeItem, Settings, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
@@ -42,54 +42,7 @@ const sections = [
 
 type SectionId = (typeof sections)[number]['id'];
 
-function LoginScreen({ onAuthenticated }: { onAuthenticated: () => Promise<void> }) {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin');
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSubmitting(true);
-    setError('');
-
-    const result = await login(username, password);
-    setSubmitting(false);
-
-    if (!result.success) {
-      setError(result.error || 'Não foi possível entrar.');
-      return;
-    }
-
-    await onAuthenticated();
-  };
-
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
-      <form onSubmit={handleSubmit} className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/90 p-8 shadow-panel">
-        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Acesso administrativo</p>
-        <h1 className="mt-3 text-3xl font-semibold text-white">Painel do chatbot</h1>
-        <div className="mt-8 space-y-4">
-          <label className="space-y-2 text-sm text-slate-300">
-            Usuário
-            <input value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-slate-500" />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            Senha
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-slate-500" />
-          </label>
-        </div>
-        {error && <div className="mt-4 rounded-2xl border border-rose-600/40 bg-rose-600/10 px-4 py-3 text-sm text-rose-100">{error}</div>}
-        <button type="submit" disabled={submitting} className="mt-6 w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70">
-          {submitting ? 'Entrando...' : 'Entrar'}
-        </button>
-      </form>
-    </main>
-  );
-}
-
 export default function Home() {
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [dashboard, setDashboard] = useState<Awaited<ReturnType<typeof getDashboard>> | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -118,26 +71,17 @@ export default function Home() {
       setKnowledge(knowledgeData);
       setWhatsappStatus(whatsapp);
       setSettings(settingsData);
-      setAuthenticated(true);
     } catch (error) {
-      setAuthenticated(false);
+      await logout();
       toast(error instanceof Error ? error.message : 'Sessão expirada. Faça login novamente.');
+      window.location.href = '/login';
     } finally {
       setPending(false);
     }
   };
 
   useEffect(() => {
-    async function load() {
-      const auth = await getAuthState();
-      setAuthenticated(auth.authenticated);
-
-      if (auth.authenticated) {
-        await loadPanel();
-      }
-    }
-
-    load();
+    loadPanel();
   }, []);
 
   const selectedConversation = useMemo(
@@ -170,20 +114,8 @@ export default function Home() {
     setKnowledge([]);
     setWhatsappStatus(null);
     setSettings(null);
-    setAuthenticated(false);
+    window.location.href = '/login';
   };
-
-  if (authenticated === null) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-300">
-        Carregando...
-      </main>
-    );
-  }
-
-  if (!authenticated) {
-    return <LoginScreen onAuthenticated={loadPanel} />;
-  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
