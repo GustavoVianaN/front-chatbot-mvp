@@ -39,27 +39,27 @@ export default function ConversationPanel({ conversation, onReply, onUpdateStatu
   const contactName = conversation.contact?.name || conversation.contact?.phone || 'Contato sem nome';
 
   return (
-    <div className="flex h-full flex-col gap-5">
-      <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-5">
+    <div className="flex h-full min-w-0 flex-col gap-4 sm:gap-5">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 sm:rounded-3xl sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Conversa</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">{contactName}</h2>
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Conversa</p>
+            <h2 className="mt-2 truncate text-lg font-semibold text-white sm:text-xl">{contactName}</h2>
             <p className="mt-1 text-sm text-slate-400">Última atualização {new Date(conversation.last_message_at).toLocaleString('pt-BR')}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => onUpdateStatus('resolvido')} className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 transition hover:bg-slate-700">
+          <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2">
+            <button type="button" onClick={() => onUpdateStatus('resolvido')} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 transition hover:bg-slate-700">
               <CheckCircle2 size={16} /> Marcar resolvida
             </button>
-            <button type="button" onClick={() => onToggleBot(!conversation.botEnabled)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 transition hover:bg-slate-700">
+            <button type="button" onClick={() => onToggleBot(!conversation.botEnabled)} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 transition hover:bg-slate-700">
               <ArrowRight size={16} /> {conversation.botEnabled ? 'Devolver para o bot' : 'Assumir atendimento'}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/80 p-4">
-        <div className="flex h-full flex-col gap-4 overflow-y-auto pr-2">
+      <div className="min-h-[340px] flex-1 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 p-3 sm:rounded-3xl sm:p-4">
+        <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1 sm:gap-4 sm:pr-2">
           {loading ? (
             <div className="mt-8 text-center text-slate-400">Carregando mensagens...</div>
           ) : messages.length === 0 ? (
@@ -69,8 +69,8 @@ export default function ConversationPanel({ conversation, onReply, onUpdateStatu
               const isOutbound = message.direction === 'outbound';
               const isBot = message.sender_type === 'bot';
               return (
-                <div key={message.id} className={`rounded-3xl p-4 ${isOutbound ? 'self-end bg-slate-800 text-slate-100' : 'self-start bg-slate-950/90 text-slate-200'}`}>
-                  <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-slate-500">
+                <div key={message.id} className={`max-w-[92%] break-words rounded-2xl p-3 sm:rounded-3xl sm:p-4 ${isOutbound ? 'self-end bg-slate-800 text-slate-100' : 'self-start bg-slate-950/90 text-slate-200'}`}>
+                  <div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-slate-500 sm:text-xs sm:tracking-[0.22em]">
                     {message.sender_type === 'cliente' ? <User size={14} /> : message.sender_type === 'bot' ? <MessageCircle size={14} /> : <CheckCircle2 size={14} />}
                     <span>{messageLabels[message.sender_type]}</span>
                   </div>
@@ -83,7 +83,7 @@ export default function ConversationPanel({ conversation, onReply, onUpdateStatu
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-5">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 sm:rounded-3xl sm:p-5">
         <label className="block text-sm font-medium text-slate-300">Resposta manual</label>
         <textarea
           value={reply}
@@ -104,7 +104,7 @@ export default function ConversationPanel({ conversation, onReply, onUpdateStatu
               });
               setReply('');
             }}
-            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 sm:w-auto"
           >
             <Send size={16} /> Enviar
           </button>

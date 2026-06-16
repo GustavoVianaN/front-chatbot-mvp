@@ -13,13 +13,13 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-panel">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Configurações gerais</p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">Dados da empresa</h2>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Configurações gerais</p>
+            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Dados da empresa</h2>
           </div>
-          <button type="button" onClick={async () => await onSave(form)} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500">
+          <button type="button" onClick={async () => await onSave(form)} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 sm:w-auto">
             Salvar alterações
           </button>
         </div>
@@ -64,18 +64,18 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-6">
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Segurança</p>
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 sm:rounded-3xl sm:p-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Segurança</p>
           <div className="mt-4 space-y-4 text-sm text-slate-300">
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3">
+            <div className="flex flex-col gap-1 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <span>Status do rate limit</span>
               <span className="font-semibold text-white">{form.rate_limit_status}</span>
             </div>
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3">
+            <div className="flex flex-col gap-1 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <span>Último deploy</span>
               <span className="font-semibold text-white">{form.last_deploy}</span>
             </div>
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3">
+            <div className="flex flex-col gap-1 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <span>Ambiente atual</span>
               <span className="font-semibold text-white">{form.environment}</span>
             </div>
