@@ -49,14 +49,14 @@ export default function KnowledgeEditor({ knowledge, onChange }: KnowledgeEditor
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-panel">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Base de Conhecimento</p>
-            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Conteúdo do atendimento</h2>
+            <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Base de Conhecimento</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Conteúdo do atendimento</h2>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative w-full sm:max-w-xs">
+            <div className="relative w-full max-w-xs">
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar" className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-slate-500" />
             </div>
@@ -88,7 +88,7 @@ export default function KnowledgeEditor({ knowledge, onChange }: KnowledgeEditor
             <textarea value={draft.content} onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))} rows={5} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
           </label>
           <div className="flex flex-wrap gap-3">
-            <button type="button" onClick={handleSave} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 sm:w-auto">
+            <button type="button" onClick={handleSave} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500">
               <CheckCircle2 size={16} /> {editing ? 'Atualizar item' : 'Adicionar item'}
             </button>
             {editing && (
@@ -107,15 +107,15 @@ export default function KnowledgeEditor({ knowledge, onChange }: KnowledgeEditor
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-panel">
         <div className="grid gap-4">
           {filtered.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/60 p-8 text-center text-slate-400">Nenhum item encontrado com esses filtros.</div>
           ) : (
             filtered.map((item) => (
               <div key={item.id} className="rounded-3xl border border-slate-800 bg-slate-950/80 p-4">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
                     <p className="text-sm font-semibold text-white">{item.title}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.28em] text-slate-500">{item.category}</p>
                   </div>

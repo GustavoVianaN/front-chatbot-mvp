@@ -16,11 +16,11 @@ export default function ConversationList({ conversations, selectedId, onSelect }
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Conversas</p>
-          <h2 className="mt-2 text-lg font-semibold text-white sm:text-xl">Fila ativa</h2>
+        <div>
+          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Conversas</p>
+          <h2 className="mt-2 text-xl font-semibold text-white">Fila ativa</h2>
         </div>
-        <div className="shrink-0 items-center gap-2 rounded-2xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs text-slate-300 hidden sm:flex">
+        <div className="flex items-center gap-2 rounded-2xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs text-slate-300">
           <BadgeCheck size={14} /> Bot ativo
         </div>
       </div>
@@ -38,7 +38,7 @@ export default function ConversationList({ conversations, selectedId, onSelect }
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="min-w-0 truncate font-semibold">{contactName}</p>
+                <p className="font-semibold">{contactName}</p>
                 <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${conversation.status === 'aberto' ? 'bg-emerald-500/10 text-emerald-200' : 'bg-slate-700 text-slate-200'}`}>{statusLabel[conversation.status]}</span>
               </div>
               <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-400">Última mensagem: {conversation.last_message || (conversation.status === 'aberto' ? 'Aguardando resposta' : 'Conversa finalizada')}</p>

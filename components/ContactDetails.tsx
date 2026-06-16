@@ -7,7 +7,7 @@ type ContactDetailsProps = {
 
 export default function ContactDetails({ conversation }: ContactDetailsProps) {
   if (!conversation) {
-    return <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-slate-400 sm:rounded-3xl sm:p-6">Selecione uma conversa para ver dados de contato e contexto.</div>;
+    return <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-6 text-slate-400">Selecione uma conversa para ver dados de contato e contexto.</div>;
   }
 
   const contactName = conversation.contact?.name || conversation.contact?.phone || 'Contato sem nome';
@@ -15,13 +15,13 @@ export default function ContactDetails({ conversation }: ContactDetailsProps) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 sm:rounded-3xl sm:p-5">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Detalhes do contato</p>
-        <h2 className="mt-3 break-words text-lg font-semibold text-white sm:text-xl">{contactName}</h2>
-        <p className="mt-2 break-words text-sm text-slate-400">{contactPhone}</p>
+      <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-5">
+        <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Detalhes do contato</p>
+        <h2 className="mt-3 text-xl font-semibold text-white">{contactName}</h2>
+        <p className="mt-2 text-sm text-slate-400">{contactPhone}</p>
       </div>
 
-      <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950/80 p-4 sm:rounded-3xl sm:p-5">
+      <div className="space-y-4 rounded-3xl border border-slate-800 bg-slate-950/80 p-5">
         <div className="flex items-center justify-between gap-4">
           <span className="text-sm text-slate-400">Primeira interação</span>
           <span className="font-medium text-slate-100">{new Date(conversation.created_at).toLocaleDateString('pt-BR')}</span>
@@ -40,8 +40,8 @@ export default function ContactDetails({ conversation }: ContactDetailsProps) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 sm:rounded-3xl sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-5">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Bot ativo</p>
             <p className="mt-1 text-sm text-slate-300">Uso do assistente nesta conversa</p>

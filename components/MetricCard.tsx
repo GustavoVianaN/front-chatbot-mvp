@@ -13,9 +13,9 @@ const toneMap = {
 
 export default function MetricCard({ label, value, tone = 'neutral' }: MetricCardProps) {
   return (
-    <div className={`rounded-2xl border px-4 py-4 shadow-panel sm:rounded-3xl sm:px-5 ${toneMap[tone]}`}>
-      <p className="text-xs uppercase tracking-[0.2em] text-slate-400 sm:text-sm sm:tracking-[0.24em]">{label}</p>
-      <p className="mt-3 break-words text-2xl font-semibold text-white sm:text-3xl">{value}</p>
+    <div className={`rounded-3xl border px-5 py-4 shadow-panel ${toneMap[tone]}`}>
+      <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{label}</p>
+      <p className="mt-3 text-3xl font-semibold text-white">{value}</p>
     </div>
   );
 }

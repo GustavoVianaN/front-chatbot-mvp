@@ -118,13 +118,13 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-950 pb-24 text-slate-100 lg:pb-0">
-      <div className="fixed inset-y-0 left-0 hidden w-72 border-r border-slate-800 bg-slate-950/98 backdrop-blur-xl lg:block">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="fixed inset-y-0 left-0 w-80 border-r border-slate-800 bg-slate-950/98 backdrop-blur-xl xl:w-72">
         <Sidebar sections={sections} activeSection={activeSection} onChange={handleChangeSection} companyName={companyName} />
       </div>
-      <main className="min-h-screen w-full lg:ml-72">
+      <main className="ml-80 min-h-screen xl:ml-72">
         <Topbar companyName={companyName} userName="Admin" status={dashboard?.botEnabled ? 'Ativo' : 'Pausado'} whatsappConnected={whatsappStatus?.tokenConfigured ? 'Conectado' : 'Aguardando'} onLogout={handleLogout} />
-        <div className="max-w-full px-4 pb-10 pt-4 sm:px-6 sm:pt-6">
+        <div className="px-6 pb-10 pt-6">
           {pending && (
             <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-300">
               Carregando dados...
@@ -134,16 +134,16 @@ export default function Home() {
           {activeSection === 'dashboard' && dashboard && (
             <section className="space-y-6">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Visão geral</p>
-                  <h1 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">Dashboard operacional</h1>
+                <div>
+                  <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Visão geral</p>
+                  <h1 className="mt-2 text-3xl font-semibold text-white">Dashboard operacional</h1>
                 </div>
-                <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-                  <button type="button" onClick={handleToggleBot} className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700 sm:px-4">
+                <div className="flex flex-wrap gap-3">
+                  <button type="button" onClick={handleToggleBot} className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700">
                     {dashboard.botEnabled ? <Pause size={16} /> : <Play size={16} />}
                     {dashboard.botEnabled ? 'Pausar bot' : 'Ativar bot'}
                   </button>
-                  <button type="button" className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700 sm:px-4">
+                  <button type="button" className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700">
                     <RefreshCw size={16} /> Atualizar
                   </button>
                 </div>
@@ -160,9 +160,9 @@ export default function Home() {
                 <MetricCard label="Uso estimado IA" value={dashboard.estimatedUsage} />
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr] xl:gap-6">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Saúde do sistema</p>
+              <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+                <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-panel">
+                  <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Saúde do sistema</p>
                   <div className="mt-4 space-y-4">
                     <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-4">
                       <p className="text-sm text-slate-400">Última mensagem</p>
@@ -180,8 +180,8 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Ações rápidas</p>
+                <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-panel">
+                  <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Ações rápidas</p>
                   <div className="mt-4 grid gap-3">
                     <button type="button" className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600">
                       Configurar bot
@@ -202,11 +202,11 @@ export default function Home() {
           )}
 
           {activeSection === 'conversations' && (
-            <section className="grid min-w-0 gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px] xl:gap-6">
-              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
+            <section className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel">
                 <ConversationList conversations={conversations} selectedId={selectedConversationId} onSelect={setSelectedConversationId} />
               </div>
-              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel">
                 <ConversationPanel conversation={selectedConversation} onReply={async (message) => {
                   if (!selectedConversation) return;
                   setPending(true);
@@ -227,7 +227,7 @@ export default function Home() {
                   toast(`Bot ${enabled ? 'ativado' : 'desativado'} nesta conversa.`);
                 }} />
               </div>
-              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel">
                 <ContactDetails conversation={selectedConversation} />
               </div>
             </section>
@@ -262,27 +262,6 @@ export default function Home() {
           )}
         </div>
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur-xl lg:hidden">
-        <div className="flex gap-1 overflow-x-auto pb-2">
-          {sections.map((section) => {
-            const Icon = section.icon;
-            const active = section.id === activeSection;
-            return (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => handleChangeSection(section.id)}
-                className={`flex min-w-[76px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] transition ${
-                  active ? 'bg-slate-800 text-white' : 'text-slate-400'
-                }`}
-              >
-                <Icon size={18} />
-                <span className="max-w-full truncate">{section.label.replace('Configurar ', '').replace('Base de ', '')}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
     </div>
   );
 }

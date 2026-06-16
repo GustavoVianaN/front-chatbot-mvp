@@ -22,11 +22,11 @@ export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProp
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-panel">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Configurar Bot</p>
-            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Assistente Bella</h2>
+            <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Configurar Bot</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Assistente Bella</h2>
           </div>
           <button
             type="button"
@@ -35,7 +35,7 @@ export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProp
               await onSave(form);
               setSaving(false);
             }}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 sm:w-auto"
+            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500"
           >
             <CheckCircle2 size={16} /> Salvar
           </button>
@@ -100,7 +100,7 @@ export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProp
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-panel">
         <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Simulação</p>
         <p className="mt-3 text-sm text-slate-400">Envie um teste rápido para ver como o bot responde.</p>
         <textarea value={testMessage} onChange={(event) => setTestMessage(event.target.value)} rows={4} className="mt-4 w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
@@ -122,7 +122,7 @@ export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProp
         )}
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-300 sm:rounded-3xl sm:p-6">
+      <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-6 text-sm text-slate-300">
         <p className="font-semibold text-white">Nota</p>
         <p className="mt-2 leading-6">Segredos como OPENAI_API_KEY, WHATSAPP_TOKEN e APP_SECRET não aparecem aqui. Estas informações ficam com o administrador.</p>
       </div>
