@@ -5,12 +5,13 @@ const AUTH_COOKIE = 'chatbot_admin_token';
 export function proxy(request: NextRequest) {
   const token = request.cookies.get(AUTH_COOKIE)?.value;
   const isLoginPage = request.nextUrl.pathname === '/login';
+  const isSetupPasswordPage = request.nextUrl.pathname === '/setup-password';
 
-  if (!token && !isLoginPage) {
+  if (!token && !isLoginPage && !isSetupPasswordPage) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (token && isLoginPage) {
+  if (token && (isLoginPage || isSetupPasswordPage)) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

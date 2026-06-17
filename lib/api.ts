@@ -13,6 +13,7 @@ import type {
 
 const DEFAULT_BACKEND_API_URL = 'http://localhost:3000/api';
 const AUTH_COOKIE = 'chatbot_admin_token';
+const REFRESH_COOKIE = 'chatbot_refresh_token';
 
 function getBackendApiUrl() {
   if (!process.env.BACKEND_API_URL && process.env.NODE_ENV === 'production') {
@@ -25,7 +26,7 @@ function getBackendApiUrl() {
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE)?.value;
-  const response = await fetch(`${getBackendApiUrl()}${path}`, {
+  let response = await fetch(`${getBackendApiUrl()}${path}`, {
     ...init,
     cache: 'no-store',
     headers: {
@@ -35,11 +36,71 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
 
+  if (response.status === 401) {
+    const refreshed = await refreshSession();
+
+    if (refreshed) {
+      response = await fetch(`${getBackendApiUrl()}${path}`, {
+        ...init,
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${refreshed}`,
+          ...init?.headers,
+        },
+      });
+    }
+  }
+
   if (!response.ok) {
     throw new Error(response.status === 401 ? 'Sessão expirada.' : 'Não foi possível concluir a operação.');
   }
 
   return response.json() as Promise<T>;
+}
+
+async function refreshSession() {
+  const cookieStore = await cookies();
+  const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;
+
+  if (!refreshToken) return null;
+
+  const response = await fetch(`${getBackendApiUrl()}/auth/refresh`, {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  if (!response.ok) {
+    cookieStore.delete(AUTH_COOKIE);
+    cookieStore.delete(REFRESH_COOKIE);
+    return null;
+  }
+
+  const payload = (await response.json()) as {
+    token: string;
+    refreshToken: string;
+  };
+
+  cookieStore.set(AUTH_COOKIE, payload.token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 15,
+  });
+  cookieStore.set(REFRESH_COOKIE, payload.refreshToken, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  return payload.token;
 }
 
 export async function login(username: string, password: string) {
@@ -49,7 +110,7 @@ export async function login(username: string, password: string) {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ email: username, password }),
   });
 
   if (!response.ok) {
@@ -58,7 +119,8 @@ export async function login(username: string, password: string) {
 
   const payload = (await response.json()) as {
     token: string;
-    user: { username: string; role: string };
+    refreshToken: string;
+    user: { email: string; role: string };
   };
 
   const cookieStore = await cookies();
@@ -67,7 +129,14 @@ export async function login(username: string, password: string) {
     sameSite: 'strict',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
-    maxAge: 60 * 60 * 8,
+    maxAge: 60 * 15,
+  });
+  cookieStore.set(REFRESH_COOKIE, payload.refreshToken, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 7,
   });
 
   return { success: true, user: payload.user };
@@ -75,7 +144,38 @@ export async function login(username: string, password: string) {
 
 export async function logout() {
   const cookieStore = await cookies();
+  const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;
+
+  if (refreshToken) {
+    await fetch(`${getBackendApiUrl()}/auth/logout`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken }),
+    }).catch(() => undefined);
+  }
+
   cookieStore.delete(AUTH_COOKIE);
+  cookieStore.delete(REFRESH_COOKIE);
+  return { success: true };
+}
+
+export async function setupPassword(token: string, password: string) {
+  const response = await fetch(`${getBackendApiUrl()}/auth/setup-password`, {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ token, password }),
+  });
+
+  if (!response.ok) {
+    return { success: false, error: 'Link inválido, expirado ou senha fraca.' };
+  }
+
   return { success: true };
 }
 
@@ -92,6 +192,7 @@ export async function getAuthState() {
     return { authenticated: true };
   } catch {
     cookieStore.delete(AUTH_COOKIE);
+    cookieStore.delete(REFRESH_COOKIE);
     return { authenticated: false };
   }
 }

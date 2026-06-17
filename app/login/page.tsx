@@ -4,7 +4,7 @@ import { FormEvent, useState } from 'react';
 import { login } from '@/lib/api';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -14,7 +14,7 @@ export default function LoginPage() {
     setSubmitting(true);
     setError('');
 
-    const result = await login(username, password);
+    const result = await login(email, password);
     setSubmitting(false);
 
     if (!result.success) {
@@ -32,12 +32,13 @@ export default function LoginPage() {
         <h1 className="mt-3 text-3xl font-semibold text-white">Painel do chatbot</h1>
         <div className="mt-8 space-y-4">
           <label className="space-y-2 text-sm text-slate-300">
-            Usuário
+            Email
             <input
-              autoComplete="username"
-              maxLength={120}
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              autoComplete="email"
+              maxLength={160}
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-slate-500"
             />
           </label>
