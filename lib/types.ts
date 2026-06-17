@@ -71,6 +71,7 @@ export type KnowledgeItem = {
 
 export type DashboardSummary = {
   botEnabled: boolean;
+  whatsappConnected: boolean;
   todayMessages: number;
   iaResponses: number;
   openConversations: number;
@@ -81,12 +82,14 @@ export type DashboardSummary = {
 };
 
 export type WhatsAppStatus = {
+  connected: boolean;
   number: string;
   phoneNumberId: string;
   webhookStatus: 'Verificado' | 'Pendente';
   lastEvent: string;
   lastMessage: string;
   tokenConfigured: boolean;
+  phoneNumberConfigured: boolean;
   metaSubscription: 'Pendente' | 'Verificada';
   environment: 'produção';
 };

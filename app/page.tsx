@@ -84,9 +84,15 @@ export default function Home() {
     [conversations, selectedConversationId]
   );
   const companyName = botConfig?.company_name || settings?.company_name || selectedConversation?.company?.name || 'Painel de Atendimento';
+  const whatsappConnected = Boolean(whatsappStatus?.connected);
 
   const handleToggleBot = async () => {
     if (!dashboard || !botConfig) return;
+
+    if (!whatsappConnected) {
+      toast('Conecte o WhatsApp antes de ativar ou pausar o bot.');
+      return;
+    }
 
     try {
       setPending(true);
@@ -129,7 +135,7 @@ export default function Home() {
         <Sidebar sections={sections} activeSection={activeSection} onChange={handleChangeSection} companyName={companyName} />
       </div>
       <main className="min-h-screen lg:ml-80 xl:ml-72">
-        <Topbar companyName={companyName} userName="Admin" status={dashboard?.botEnabled ? 'Ativo' : 'Pausado'} whatsappConnected={whatsappStatus?.tokenConfigured ? 'Conectado' : 'Aguardando'} onLogout={handleLogout} />
+        <Topbar companyName={companyName} userName="Admin" status={!whatsappConnected ? 'Indisponível' : dashboard?.botEnabled ? 'Ativo' : 'Pausado'} whatsappConnected={whatsappConnected ? 'Conectado' : 'Não conectado'} onLogout={handleLogout} />
         <div className="px-4 pb-10 pt-4 sm:px-6 sm:pt-6">
           {pending && (
             <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-300">
@@ -145,7 +151,7 @@ export default function Home() {
                   <h1 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">Dashboard operacional</h1>
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-                  <button type="button" onClick={handleToggleBot} className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700 sm:px-4">
+                  <button type="button" onClick={handleToggleBot} disabled={!whatsappConnected} className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4">
                     {dashboard.botEnabled ? <Pause size={16} /> : <Play size={16} />}
                     {dashboard.botEnabled ? 'Pausar bot' : 'Ativar bot'}
                   </button>
@@ -156,8 +162,8 @@ export default function Home() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard label="Status do Bot" value={dashboard.botEnabled ? 'Ativo' : 'Inativo'} tone={dashboard.botEnabled ? 'success' : 'neutral'} />
-                <MetricCard label="WhatsApp" value={whatsappStatus?.tokenConfigured ? 'Conectado' : 'Aguardando'} tone={whatsappStatus?.tokenConfigured ? 'success' : 'warning'} />
+                <MetricCard label="Status do Bot" value={!whatsappConnected ? 'Indisponível' : dashboard.botEnabled ? 'Ativo' : 'Inativo'} tone={whatsappConnected && dashboard.botEnabled ? 'success' : 'neutral'} />
+                <MetricCard label="WhatsApp" value={whatsappConnected ? 'Conectado' : 'Não conectado'} tone={whatsappConnected ? 'success' : 'warning'} />
                 <MetricCard label="Mensagens hoje" value={dashboard.todayMessages.toString()} />
                 <MetricCard label="Respostas IA" value={dashboard.iaResponses.toString()} />
                 <MetricCard label="Conversas abertas" value={dashboard.openConversations.toString()} />

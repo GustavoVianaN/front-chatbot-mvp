@@ -23,12 +23,14 @@ export default function WhatsAppStatusPanel({ status }: WhatsAppStatusPanelProps
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {[
+            { label: 'Conexão', value: status.connected ? 'Conectado' : 'Não conectado' },
             { label: 'Número conectado', value: status.number },
             { label: 'Phone Number ID', value: status.phoneNumberId },
             { label: 'Webhook', value: status.webhookStatus },
             { label: 'Último evento', value: status.lastEvent },
             { label: 'Última mensagem', value: status.lastMessage },
             { label: 'Token configurado', value: status.tokenConfigured ? 'Sim' : 'Não' },
+            { label: 'Número registrado', value: status.phoneNumberConfigured ? 'Sim' : 'Não' },
             { label: 'Assinatura Meta', value: status.metaSubscription },
             { label: 'Ambiente', value: status.environment },
           ].map((item) => (
