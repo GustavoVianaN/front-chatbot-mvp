@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Clínica Bella | Painel de Atendimento',
+  title: 'Painel de Atendimento',
   description: 'Painel operacional de atendimento IA para WhatsApp.',
 };
 
