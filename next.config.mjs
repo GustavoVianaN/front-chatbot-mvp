@@ -14,7 +14,7 @@ const securityHeaders = [
       `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
       "style-src 'self' 'unsafe-inline'",
       "connect-src 'self'",
-      'upgrade-insecure-requests',
+      ...(isDev ? [] : ['upgrade-insecure-requests']),
     ].join('; '),
   },
   {
