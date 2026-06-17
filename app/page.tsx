@@ -3,19 +3,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Bookmark,
-  CheckCircle2,
-  ClipboardList,
   FileText,
   LayoutDashboard,
   MessageSquare,
   Pause,
   Play,
   RefreshCw,
-  Search,
   Settings as SettingsIcon,
-  ShieldCheck,
   Sparkles,
-  User,
+  TestTube2,
 } from 'lucide-react';
 import { getBotConfig, getConversations, getDashboard, getKnowledge, getSettings, getWhatsappStatus, logout, replyToConversation, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
 import type { BotConfig, Conversation, KnowledgeItem, Settings, WhatsAppStatus } from '@/lib/types';
@@ -52,6 +48,7 @@ export default function Home() {
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pending, setPending] = useState(false);
+  const [focusBotTest, setFocusBotTest] = useState(false);
 
   const loadPanel = async () => {
     try {
@@ -91,18 +88,43 @@ export default function Home() {
   const companyName = botConfig?.company_name || settings?.company_name || selectedConversation?.company?.name || 'Painel de Atendimento';
 
   const handleToggleBot = async () => {
-    if (!dashboard) return;
-    setPending(true);
-    const newStatus = !dashboard.botEnabled;
-    const updated = await updateBotConfig({ ...botConfig!, bot_enabled: newStatus });
-    setBotConfig(updated);
-    setDashboard({ ...dashboard, botEnabled: newStatus });
-    toast(`Bot ${newStatus ? 'ativado' : 'pausado'} com sucesso.`);
-    setPending(false);
+    if (!dashboard || !botConfig) return;
+
+    try {
+      setPending(true);
+      const newStatus = !dashboard.botEnabled;
+      const updated = await updateBotConfig({ ...botConfig, bot_enabled: newStatus });
+      setBotConfig(updated);
+      setDashboard({ ...dashboard, botEnabled: newStatus });
+      toast(`Bot ${newStatus ? 'ativado' : 'pausado'} com sucesso.`);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível alterar o bot.');
+    } finally {
+      setPending(false);
+    }
   };
 
   const handleChangeSection = (section: string) => {
     setActiveSection(section as SectionId);
+  };
+
+  const handleRefresh = async () => {
+    await loadPanel();
+    toast('Dados atualizados.');
+  };
+
+  const handleOpenBotConfig = () => {
+    setFocusBotTest(false);
+    setActiveSection('bot-config');
+  };
+
+  const handleOpenConversations = () => {
+    setActiveSection('conversations');
+  };
+
+  const handleOpenBotTest = () => {
+    setFocusBotTest(true);
+    setActiveSection('bot-config');
   };
 
   const handleLogout = async () => {
@@ -143,7 +165,7 @@ export default function Home() {
                     {dashboard.botEnabled ? <Pause size={16} /> : <Play size={16} />}
                     {dashboard.botEnabled ? 'Pausar bot' : 'Ativar bot'}
                   </button>
-                  <button type="button" className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700 sm:px-4">
+                  <button type="button" onClick={handleRefresh} className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700 sm:px-4">
                     <RefreshCw size={16} /> Atualizar
                   </button>
                 </div>
@@ -183,17 +205,21 @@ export default function Home() {
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Ações rápidas</p>
                   <div className="mt-4 grid gap-3">
-                    <button type="button" className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600">
+                    <button type="button" onClick={handleOpenBotConfig} className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600 hover:bg-slate-900">
+                      <Sparkles size={16} className="shrink-0 text-slate-400" />
                       Configurar bot
                     </button>
-                    <button type="button" className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600">
+                    <button type="button" onClick={handleOpenConversations} className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600 hover:bg-slate-900">
+                      <MessageSquare size={16} className="shrink-0 text-slate-400" />
                       Ver conversas
                     </button>
-                    <button type="button" className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600">
+                    <button type="button" onClick={handleOpenBotTest} className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600 hover:bg-slate-900">
+                      <TestTube2 size={16} className="shrink-0 text-slate-400" />
                       Testar resposta
                     </button>
-                    <button type="button" className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600">
-                      Pausar automação
+                    <button type="button" onClick={handleToggleBot} className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600 hover:bg-slate-900">
+                      {dashboard.botEnabled ? <Pause size={16} className="shrink-0 text-slate-400" /> : <Play size={16} className="shrink-0 text-slate-400" />}
+                      {dashboard.botEnabled ? 'Pausar automação' : 'Ativar automação'}
                     </button>
                   </div>
                 </div>
@@ -234,7 +260,7 @@ export default function Home() {
           )}
 
           {activeSection === 'bot-config' && botConfig && (
-            <BotConfigPanel botConfig={botConfig} onSave={async (data) => {
+            <BotConfigPanel botConfig={botConfig} focusTest={focusBotTest} onTestFocused={() => setFocusBotTest(false)} onSave={async (data) => {
               setPending(true);
               const updated = await updateBotConfig(data);
               setBotConfig(updated);
