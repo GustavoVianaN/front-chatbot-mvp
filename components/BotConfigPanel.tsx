@@ -70,6 +70,29 @@ export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProp
               <option value="detalhada">Detalhada</option>
             </select>
           </label>
+          <div className="lg:col-span-2">
+            <p className="mt-2 text-xs uppercase tracking-[0.24em] text-slate-500">Guardrails e Escopo</p>
+          </div>
+          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+            Escopo permitido
+            <textarea value={form.business_scope} onChange={(event) => handleChange('business_scope', event.target.value)} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+          </label>
+          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+            Guardrails obrigatórios
+            <textarea value={form.guardrails} onChange={(event) => handleChange('guardrails', event.target.value)} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+          </label>
+          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+            Assuntos bloqueados
+            <textarea value={form.blocked_topics} onChange={(event) => handleChange('blocked_topics', event.target.value)} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+          </label>
+          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+            Quando encaminhar para humano
+            <textarea value={form.handoff_triggers} onChange={(event) => handleChange('handoff_triggers', event.target.value)} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+          </label>
+          <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+            Regras de resposta
+            <textarea value={form.response_rules} onChange={(event) => handleChange('response_rules', event.target.value)} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+          </label>
           <label className="space-y-2 text-sm text-slate-300 lg:col-span-2">
             Mensagem de boas-vindas
             <textarea value={form.welcome_message} onChange={(event) => handleChange('welcome_message', event.target.value)} rows={2} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
@@ -96,6 +119,10 @@ export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProp
           <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
             <input type="checkbox" checked={form.knowledge_only} onChange={(event) => handleChange('knowledge_only', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />
             Usar apenas base de conhecimento
+          </label>
+          <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
+            <input type="checkbox" checked={form.prompt_injection_protection} onChange={(event) => handleChange('prompt_injection_protection', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />
+            Bloquear prompt injection
           </label>
         </div>
       </div>

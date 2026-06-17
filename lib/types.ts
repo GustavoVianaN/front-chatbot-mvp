@@ -18,10 +18,16 @@ export type BotConfig = {
   welcome_message: string;
   fallback_message: string;
   out_of_hours_message: string;
+  business_scope: string;
+  guardrails: string;
+  blocked_topics: string;
+  handoff_triggers: string;
+  response_rules: string;
   bot_enabled: boolean;
   response_length: 'curta' | 'média' | 'detalhada';
   allow_human_handoff: boolean;
   knowledge_only: boolean;
+  prompt_injection_protection: boolean;
   created_at: string;
   updated_at: string;
 };
