@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Settings as SettingsIcon,
   Sparkles,
-  TestTube2,
 } from 'lucide-react';
 import { getBotConfig, getConversations, getDashboard, getKnowledge, getSettings, getWhatsappStatus, logout, replyToConversation, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
 import type { BotConfig, Conversation, KnowledgeItem, Settings, WhatsAppStatus } from '@/lib/types';
@@ -48,7 +47,6 @@ export default function Home() {
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pending, setPending] = useState(false);
-  const [focusBotTest, setFocusBotTest] = useState(false);
 
   const loadPanel = async () => {
     try {
@@ -113,20 +111,6 @@ export default function Home() {
     toast('Dados atualizados.');
   };
 
-  const handleOpenBotConfig = () => {
-    setFocusBotTest(false);
-    setActiveSection('bot-config');
-  };
-
-  const handleOpenConversations = () => {
-    setActiveSection('conversations');
-  };
-
-  const handleOpenBotTest = () => {
-    setFocusBotTest(true);
-    setActiveSection('bot-config');
-  };
-
   const handleLogout = async () => {
     await logout();
     setDashboard(null);
@@ -182,7 +166,7 @@ export default function Home() {
                 <MetricCard label="Uso estimado IA" value={dashboard.estimatedUsage} />
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr] xl:gap-6">
+              <div className="grid gap-4 xl:gap-6">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Saúde do sistema</p>
                   <div className="mt-4 space-y-4">
@@ -200,27 +184,6 @@ export default function Home() {
                         <p className="mt-2 text-sm font-medium text-slate-100">{whatsappStatus?.lastEvent}</p>
                       </div>
                     </div>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Ações rápidas</p>
-                  <div className="mt-4 grid gap-3">
-                    <button type="button" onClick={handleOpenBotConfig} className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600 hover:bg-slate-900">
-                      <Sparkles size={16} className="shrink-0 text-slate-400" />
-                      Configurar bot
-                    </button>
-                    <button type="button" onClick={handleOpenConversations} className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600 hover:bg-slate-900">
-                      <MessageSquare size={16} className="shrink-0 text-slate-400" />
-                      Ver conversas
-                    </button>
-                    <button type="button" onClick={handleOpenBotTest} className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600 hover:bg-slate-900">
-                      <TestTube2 size={16} className="shrink-0 text-slate-400" />
-                      Testar resposta
-                    </button>
-                    <button type="button" onClick={handleToggleBot} className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-left text-sm text-slate-100 transition hover:border-slate-600 hover:bg-slate-900">
-                      {dashboard.botEnabled ? <Pause size={16} className="shrink-0 text-slate-400" /> : <Play size={16} className="shrink-0 text-slate-400" />}
-                      {dashboard.botEnabled ? 'Pausar automação' : 'Ativar automação'}
-                    </button>
                   </div>
                 </div>
               </div>
@@ -260,7 +223,7 @@ export default function Home() {
           )}
 
           {activeSection === 'bot-config' && botConfig && (
-            <BotConfigPanel botConfig={botConfig} focusTest={focusBotTest} onTestFocused={() => setFocusBotTest(false)} onSave={async (data) => {
+            <BotConfigPanel botConfig={botConfig} onSave={async (data) => {
               setPending(true);
               const updated = await updateBotConfig(data);
               setBotConfig(updated);

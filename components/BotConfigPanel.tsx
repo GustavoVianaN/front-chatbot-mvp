@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle2, Sparkles, TestTube2 } from 'lucide-react';
 import type { BotConfig } from '@/lib/types';
 import { generateBotTestResponse } from '@/lib/api';
@@ -8,27 +8,17 @@ import { generateBotTestResponse } from '@/lib/api';
 type BotConfigPanelProps = {
   botConfig: BotConfig;
   onSave: (data: BotConfig) => Promise<void>;
-  focusTest?: boolean;
-  onTestFocused?: () => void;
 };
 
-export default function BotConfigPanel({ botConfig, onSave, focusTest, onTestFocused }: BotConfigPanelProps) {
+export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProps) {
   const [form, setForm] = useState<BotConfig>(botConfig);
   const [testMessage, setTestMessage] = useState('Olá, preciso de ajuda com horários.');
   const [testResponse, setTestResponse] = useState('');
   const [saving, setSaving] = useState(false);
-  const testRef = useRef<HTMLDivElement>(null);
 
   const handleChange = (field: keyof BotConfig, value: string | boolean) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
-
-  useEffect(() => {
-    if (!focusTest) return;
-
-    testRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    onTestFocused?.();
-  }, [focusTest, onTestFocused]);
 
   return (
     <div className="space-y-6">
@@ -110,7 +100,7 @@ export default function BotConfigPanel({ botConfig, onSave, focusTest, onTestFoc
         </div>
       </div>
 
-      <div ref={testRef} className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
         <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Simulação</p>
         <p className="mt-3 text-sm text-slate-400">Envie um teste rápido para ver como o bot responde.</p>
         <textarea value={testMessage} onChange={(event) => setTestMessage(event.target.value)} rows={4} className="mt-4 w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
