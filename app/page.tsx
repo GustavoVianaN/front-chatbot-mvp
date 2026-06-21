@@ -235,6 +235,10 @@ export default function Home() {
               setBotConfig(updated);
               toast('Configurações do bot salvas.');
               setPending(false);
+            }} onRefresh={async () => {
+              const latestConfig = await getBotConfig();
+              setBotConfig(latestConfig);
+              return latestConfig;
             }} />
           )}
 

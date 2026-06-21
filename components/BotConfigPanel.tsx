@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, MessageCircle, RotateCcw, Send, TestTube2, X } from 'lucide-react';
 import type { BotConfig } from '@/lib/types';
 import { generateBotTestResponse } from '@/lib/api';
@@ -8,6 +8,7 @@ import { generateBotTestResponse } from '@/lib/api';
 type BotConfigPanelProps = {
   botConfig: BotConfig;
   onSave: (data: BotConfig) => Promise<void>;
+  onRefresh: () => Promise<BotConfig>;
 };
 
 type TestMessage = {
@@ -22,21 +23,34 @@ function formatConversationContext(messages: TestMessage[]) {
     .join('\n');
 }
 
-export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProps) {
+export default function BotConfigPanel({ botConfig, onSave, onRefresh }: BotConfigPanelProps) {
   const [form, setForm] = useState<BotConfig>(botConfig);
   const [testMessage, setTestMessage] = useState('');
   const [testMessages, setTestMessages] = useState<TestMessage[]>([]);
   const [simulationOpen, setSimulationOpen] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [refreshingSimulation, setRefreshingSimulation] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(botConfig);
+  }, [botConfig]);
 
   const handleChange = (field: keyof BotConfig, value: string | boolean) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
-  const resetSimulation = () => {
+  const resetSimulation = async () => {
     setTestMessage('');
     setTestMessages([]);
+
+    try {
+      setRefreshingSimulation(true);
+      const latestConfig = await onRefresh();
+      setForm(latestConfig);
+    } finally {
+      setRefreshingSimulation(false);
+    }
   };
 
   const sendTestMessage = async () => {
@@ -212,7 +226,7 @@ export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProp
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={resetSimulation} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-700 text-slate-300 transition hover:bg-slate-800" aria-label="Resetar conversa">
+                <button type="button" onClick={resetSimulation} disabled={refreshingSimulation} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-700 text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60" aria-label="Resetar conversa e recarregar configuração">
                   <RotateCcw size={16} />
                 </button>
                 <button type="button" onClick={() => setSimulationOpen(false)} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-700 text-slate-300 transition hover:bg-slate-800" aria-label="Fechar simulação">
@@ -225,7 +239,7 @@ export default function BotConfigPanel({ botConfig, onSave }: BotConfigPanelProp
               {testMessages.length === 0 ? (
                 <div className="m-auto max-w-sm text-center text-sm leading-6 text-slate-400">
                   <p className="text-base font-medium text-white">Nova conversa iniciada</p>
-                  <p className="mt-2">As mensagens enviadas aqui entram no contexto até você resetar.</p>
+                  <p className="mt-2">{refreshingSimulation ? 'Recarregando configuração do banco...' : 'As mensagens enviadas aqui entram no contexto até você resetar.'}</p>
                 </div>
               ) : (
                 testMessages.map((message) => {
