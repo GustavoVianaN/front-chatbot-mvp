@@ -245,10 +245,10 @@ export async function updateBotConfig(data: BotConfig): Promise<BotConfig> {
   });
 }
 
-export async function generateBotTestResponse(data: BotConfig, userMessage: string) {
+export async function generateBotTestResponse(data: BotConfig, userMessage: string, conversationContext?: string) {
   const payload = await apiRequest<{ response: string }>('/bot-config/test', {
     method: 'POST',
-    body: JSON.stringify({ botConfig: data, message: userMessage }),
+    body: JSON.stringify({ botConfig: data, message: userMessage, conversationContext }),
   });
 
   return payload.response;
