@@ -9,6 +9,12 @@
   color: #e5e7eb;
 }
 
+:root.theme-light {
+  color-scheme: light;
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -18,6 +24,10 @@ body {
   min-height: 100vh;
   background: #020617;
   overflow-x: hidden;
+}
+
+.theme-light body {
+  background: #f8fafc;
 }
 
 button,
@@ -40,6 +50,10 @@ select {
   background: #0f172a;
 }
 
+.theme-light ::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
 ::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.24);
   border-radius: 9999px;
@@ -47,4 +61,78 @@ select {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.36);
+}
+
+.theme-light .bg-slate-950,
+.theme-light .bg-slate-950\/90,
+.theme-light .bg-slate-950\/95,
+.theme-light .bg-slate-950\/98,
+.theme-light .bg-slate-950\/80,
+.theme-light .bg-slate-950\/60 {
+  background-color: #f8fafc !important;
+}
+
+.theme-light .bg-slate-900,
+.theme-light .bg-slate-900\/90,
+.theme-light .bg-slate-900\/80 {
+  background-color: #ffffff !important;
+}
+
+.theme-light .bg-slate-800,
+.theme-light .bg-slate-800\/80 {
+  background-color: #e2e8f0 !important;
+}
+
+.theme-light .bg-slate-700,
+.theme-light .bg-slate-700\/70 {
+  background-color: #cbd5e1 !important;
+}
+
+.theme-light .border-slate-800,
+.theme-light .border-slate-700,
+.theme-light .border-slate-600,
+.theme-light .border-slate-500 {
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light .text-white,
+.theme-light .text-slate-100,
+.theme-light .text-slate-200 {
+  color: #0f172a !important;
+}
+
+.theme-light .text-slate-300,
+.theme-light .text-slate-400 {
+  color: #475569 !important;
+}
+
+.theme-light .text-slate-500 {
+  color: #64748b !important;
+}
+
+.theme-light .hover\:bg-slate-900\/80:hover,
+.theme-light .hover\:bg-slate-900:hover,
+.theme-light .hover\:bg-slate-800:hover,
+.theme-light .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.theme-light .hover\:text-white:hover,
+.theme-light .hover\:text-slate-100:hover {
+  color: #020617 !important;
+}
+
+.theme-light input,
+.theme-light textarea,
+.theme-light select {
+  color: #0f172a;
+}
+
+.theme-light input::placeholder,
+.theme-light textarea::placeholder {
+  color: #94a3b8;
+}
+
+.theme-light .shadow-panel {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 12px 32px rgba(15, 23, 42, 0.06);
 }

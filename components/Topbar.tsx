@@ -1,12 +1,16 @@
+import { Moon, Sun } from 'lucide-react';
+
 type TopbarProps = {
   companyName: string;
   userName: string;
   status: string;
   whatsappConnected?: string;
   onLogout?: () => void;
+  theme?: 'dark' | 'light';
+  onToggleTheme?: () => void;
 };
 
-export default function Topbar({ companyName, userName, status, whatsappConnected, onLogout }: TopbarProps) {
+export default function Topbar({ companyName, userName, status, whatsappConnected, onLogout, theme = 'dark', onToggleTheme }: TopbarProps) {
   return (
     <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur-xl sm:px-6 sm:py-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -24,6 +28,12 @@ export default function Topbar({ companyName, userName, status, whatsappConnecte
           <div className="hidden shrink-0 rounded-2xl border border-slate-800 bg-slate-900/80 px-3 py-2 sm:block">
             Usuário: <span className="font-semibold text-white">{userName}</span>
           </div>
+          {onToggleTheme && (
+            <button type="button" onClick={onToggleTheme} className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-slate-200 transition hover:border-slate-500 hover:text-white" aria-label="Alternar tema">
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              {theme === 'dark' ? 'Claro' : 'Escuro'}
+            </button>
+          )}
           {onLogout && (
             <button type="button" onClick={onLogout} className="shrink-0 rounded-2xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-slate-200 transition hover:border-slate-500 hover:text-white">
               Sair

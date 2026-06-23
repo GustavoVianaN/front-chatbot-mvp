@@ -2,18 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Bookmark,
-  FileText,
   LayoutDashboard,
-  MessageSquare,
-  Pause,
-  Play,
+  MessageCircle,
   RefreshCw,
   Settings as SettingsIcon,
   Sparkles,
 } from 'lucide-react';
-import { getBotConfig, getConversations, getDashboard, getKnowledge, getSettings, getWhatsappStatus, logout, replyToConversation, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
-import type { BotConfig, Conversation, KnowledgeItem, Settings, WhatsAppStatus } from '@/lib/types';
+import { getBotConfig, getConversations, getDashboard, getKnowledge, getKnowledgeFiles, getSettings, getWhatsappStatus, logout, replyToConversation, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import type { BotConfig, Conversation, KnowledgeFile, KnowledgeItem, Settings, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import MetricCard from '@/components/MetricCard';
@@ -28,22 +24,27 @@ import { toast } from '@/components/Toast';
 
 const sections = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'conversations', label: 'Conversas', icon: MessageSquare },
   { id: 'bot-config', label: 'Configurar Bot', icon: Sparkles },
-  { id: 'knowledge', label: 'Base de Conhecimento', icon: Bookmark },
-  { id: 'whatsapp', label: 'WhatsApp', icon: FileText },
+  { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { id: 'settings', label: 'Configurações', icon: SettingsIcon },
 ] as const;
 
 type SectionId = (typeof sections)[number]['id'];
+type BotConfigTab = 'config' | 'knowledge';
+type WhatsappTab = 'status' | 'conversations';
+type ThemeMode = 'dark' | 'light';
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
+  const [botConfigTab, setBotConfigTab] = useState<BotConfigTab>('config');
+  const [whatsappTab, setWhatsappTab] = useState<WhatsappTab>('status');
+  const [theme, setTheme] = useState<ThemeMode>('dark');
   const [dashboard, setDashboard] = useState<Awaited<ReturnType<typeof getDashboard>> | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [botConfig, setBotConfig] = useState<BotConfig | null>(null);
   const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
+  const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>([]);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pending, setPending] = useState(false);
@@ -51,11 +52,12 @@ export default function Home() {
   const loadPanel = async () => {
     try {
       setPending(true);
-      const [dashboardData, convos, config, knowledgeData, whatsapp, settingsData] = await Promise.all([
+      const [dashboardData, convos, config, knowledgeData, knowledgeFilesData, whatsapp, settingsData] = await Promise.all([
         getDashboard(),
         getConversations(),
         getBotConfig(),
         getKnowledge(),
+        getKnowledgeFiles(),
         getWhatsappStatus(),
         getSettings(),
       ]);
@@ -64,12 +66,18 @@ export default function Home() {
       setSelectedConversationId(convos[0]?.id ?? null);
       setBotConfig(config);
       setKnowledge(knowledgeData);
+      setKnowledgeFiles(knowledgeFilesData);
       setWhatsappStatus(whatsapp);
       setSettings(settingsData);
     } catch (error) {
-      await logout();
-      toast(error instanceof Error ? error.message : 'Sessão expirada. Faça login novamente.');
-      window.location.href = '/login';
+      const message = error instanceof Error ? error.message : 'Não foi possível carregar o painel.';
+
+      toast(message);
+
+      if (message.includes('Sessão expirada')) {
+        await logout();
+        window.location.href = '/login';
+      }
     } finally {
       setPending(false);
     }
@@ -79,34 +87,25 @@ export default function Home() {
     loadPanel();
   }, []);
 
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem('panel-theme');
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('theme-light', theme === 'light');
+    document.documentElement.classList.toggle('theme-dark', theme === 'dark');
+    window.localStorage.setItem('panel-theme', theme);
+  }, [theme]);
+
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.id === selectedConversationId) ?? conversations[0] ?? null,
     [conversations, selectedConversationId]
   );
   const companyName = botConfig?.company_name || settings?.company_name || selectedConversation?.company?.name || 'Painel de Atendimento';
   const whatsappConnected = Boolean(whatsappStatus?.connected);
-
-  const handleToggleBot = async () => {
-    if (!dashboard || !botConfig) return;
-
-    if (!whatsappConnected) {
-      toast('Conecte o WhatsApp antes de ativar ou pausar o bot.');
-      return;
-    }
-
-    try {
-      setPending(true);
-      const newStatus = !dashboard.botEnabled;
-      const updated = await updateBotConfig({ ...botConfig, bot_enabled: newStatus });
-      setBotConfig(updated);
-      setDashboard({ ...dashboard, botEnabled: newStatus });
-      toast(`Bot ${newStatus ? 'ativado' : 'pausado'} com sucesso.`);
-    } catch (error) {
-      toast(error instanceof Error ? error.message : 'Não foi possível alterar o bot.');
-    } finally {
-      setPending(false);
-    }
-  };
 
   const handleChangeSection = (section: string) => {
     setActiveSection(section as SectionId);
@@ -117,6 +116,10 @@ export default function Home() {
     toast('Dados atualizados.');
   };
 
+  const handleToggleTheme = () => {
+    setTheme((current) => current === 'dark' ? 'light' : 'dark');
+  };
+
   const handleLogout = async () => {
     await logout();
     setDashboard(null);
@@ -124,6 +127,7 @@ export default function Home() {
     setSelectedConversationId(null);
     setBotConfig(null);
     setKnowledge([]);
+    setKnowledgeFiles([]);
     setWhatsappStatus(null);
     setSettings(null);
     window.location.href = '/login';
@@ -135,7 +139,7 @@ export default function Home() {
         <Sidebar sections={sections} activeSection={activeSection} onChange={handleChangeSection} companyName={companyName} />
       </div>
       <main className="min-h-screen lg:ml-80 xl:ml-72">
-        <Topbar companyName={companyName} userName="Admin" status={!whatsappConnected ? 'Indisponível' : dashboard?.botEnabled ? 'Ativo' : 'Pausado'} whatsappConnected={whatsappConnected ? 'Conectado' : 'Não conectado'} onLogout={handleLogout} />
+        <Topbar companyName={companyName} userName="Admin" status={!whatsappConnected ? 'Indisponível' : dashboard?.botEnabled ? 'Ativo' : 'Pausado'} whatsappConnected={whatsappConnected ? 'Conectado' : 'Não conectado'} onLogout={handleLogout} theme={theme} onToggleTheme={handleToggleTheme} />
         <div className="px-4 pb-10 pt-4 sm:px-6 sm:pt-6">
           {pending && (
             <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-300">
@@ -150,11 +154,7 @@ export default function Home() {
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Visão geral</p>
                   <h1 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">Dashboard operacional</h1>
                 </div>
-                <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-                  <button type="button" onClick={handleToggleBot} disabled={!whatsappConnected} className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4">
-                    {dashboard.botEnabled ? <Pause size={16} /> : <Play size={16} />}
-                    {dashboard.botEnabled ? 'Pausar bot' : 'Ativar bot'}
-                  </button>
+                <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
                   <button type="button" onClick={handleRefresh} className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-700 sm:px-4">
                     <RefreshCw size={16} /> Atualizar
                   </button>
@@ -162,8 +162,6 @@ export default function Home() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard label="Status do Bot" value={!whatsappConnected ? 'Indisponível' : dashboard.botEnabled ? 'Ativo' : 'Inativo'} tone={whatsappConnected && dashboard.botEnabled ? 'success' : 'neutral'} />
-                <MetricCard label="WhatsApp" value={whatsappConnected ? 'Conectado' : 'Não conectado'} tone={whatsappConnected ? 'success' : 'warning'} />
                 <MetricCard label="Mensagens hoje" value={dashboard.todayMessages.toString()} />
                 <MetricCard label="Respostas IA" value={dashboard.iaResponses.toString()} />
                 <MetricCard label="Conversas abertas" value={dashboard.openConversations.toString()} />
@@ -174,21 +172,11 @@ export default function Home() {
 
               <div className="grid gap-4 xl:gap-6">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Saúde do sistema</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Atividade recente</p>
                   <div className="mt-4 space-y-4">
                     <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-4">
-                      <p className="text-sm text-slate-400">Última mensagem</p>
+                      <p className="text-sm text-slate-400">Última atividade registrada</p>
                       <p className="mt-2 text-sm font-medium text-slate-100">{dashboard.lastMessage}</p>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-4">
-                        <p className="text-sm text-slate-400">Webhook</p>
-                        <p className="mt-2 text-sm font-medium text-slate-100">{whatsappStatus?.webhookStatus}</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-4">
-                        <p className="text-sm text-slate-400">Último evento</p>
-                        <p className="mt-2 text-sm font-medium text-slate-100">{whatsappStatus?.lastEvent}</p>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -196,58 +184,92 @@ export default function Home() {
             </section>
           )}
 
-          {activeSection === 'conversations' && (
-            <section className="grid min-w-0 gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px] xl:gap-6">
-              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
-                <ConversationList conversations={conversations} selectedId={selectedConversationId} onSelect={setSelectedConversationId} />
+          {activeSection === 'bot-config' && botConfig && (
+            <section className="space-y-4">
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Configurar Bot</p>
+                  <h1 className="mt-1 text-xl font-semibold text-white">Bot e base de conhecimento</h1>
+                </div>
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-1 sm:w-auto">
+                  <button type="button" onClick={() => setBotConfigTab('config')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${botConfigTab === 'config' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}>
+                    Configurações
+                  </button>
+                  <button type="button" onClick={() => setBotConfigTab('knowledge')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${botConfigTab === 'knowledge' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}>
+                    Base
+                  </button>
+                </div>
               </div>
-              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
-                <ConversationPanel conversation={selectedConversation} onReply={async (message) => {
-                  if (!selectedConversation) return;
+
+              {botConfigTab === 'config' ? (
+                <BotConfigPanel botConfig={botConfig} onSave={async (data) => {
                   setPending(true);
-                  const result = await replyToConversation(selectedConversation.id, message);
-                  setConversations((current) => current.map((conv) => conv.id === selectedConversation.id ? { ...conv, last_message: message, last_message_at: new Date().toISOString() } : conv));
-                  toast('Resposta enviada com sucesso.');
+                  const updated = await updateBotConfig(data);
+                  setBotConfig(updated);
+                  toast('Configurações do bot salvas.');
                   setPending(false);
-                  return result.message;
-                }} onUpdateStatus={async (status) => {
-                  if (!selectedConversation) return;
-                  await updateConversationStatus(selectedConversation.id, status);
-                  setConversations((current) => current.map((conv) => conv.id === selectedConversation.id ? { ...conv, status } : conv));
-                  toast('Status atualizado.');
-                }} onToggleBot={async (enabled) => {
-                  if (!selectedConversation) return;
-                  await updateConversationBot(selectedConversation.id, enabled);
-                  setConversations((current) => current.map((conv) => conv.id === selectedConversation.id ? { ...conv, botEnabled: enabled } : conv));
-                  toast(`Bot ${enabled ? 'ativado' : 'desativado'} nesta conversa.`);
+                }} onRefresh={async () => {
+                  const latestConfig = await getBotConfig();
+                  setBotConfig(latestConfig);
+                  return latestConfig;
                 }} />
-              </div>
-              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
-                <ContactDetails conversation={selectedConversation} />
-              </div>
+              ) : (
+                <KnowledgeEditor knowledge={knowledge} onChange={setKnowledge} files={knowledgeFiles} onFilesChange={setKnowledgeFiles} />
+              )}
             </section>
           )}
 
-          {activeSection === 'bot-config' && botConfig && (
-            <BotConfigPanel botConfig={botConfig} onSave={async (data) => {
-              setPending(true);
-              const updated = await updateBotConfig(data);
-              setBotConfig(updated);
-              toast('Configurações do bot salvas.');
-              setPending(false);
-            }} onRefresh={async () => {
-              const latestConfig = await getBotConfig();
-              setBotConfig(latestConfig);
-              return latestConfig;
-            }} />
-          )}
-
-          {activeSection === 'knowledge' && (
-            <KnowledgeEditor knowledge={knowledge} onChange={setKnowledge} />
-          )}
-
           {activeSection === 'whatsapp' && whatsappStatus && (
-            <WhatsAppStatusPanel status={whatsappStatus} />
+            <section className="space-y-4">
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-400 sm:text-sm sm:tracking-[0.24em]">WhatsApp</p>
+                  <h1 className="mt-1 text-xl font-semibold text-white">Integração e conversas</h1>
+                </div>
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-1 sm:w-auto">
+                  <button type="button" onClick={() => setWhatsappTab('status')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${whatsappTab === 'status' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                    Integração
+                  </button>
+                  <button type="button" onClick={() => setWhatsappTab('conversations')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${whatsappTab === 'conversations' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                    Conversas
+                  </button>
+                </div>
+              </div>
+
+              {whatsappTab === 'status' ? (
+                <WhatsAppStatusPanel status={whatsappStatus} />
+              ) : (
+                <section className="grid min-w-0 gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px] xl:gap-6">
+                  <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
+                    <ConversationList conversations={conversations} selectedId={selectedConversationId} onSelect={setSelectedConversationId} />
+                  </div>
+                  <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
+                    <ConversationPanel conversation={selectedConversation} onReply={async (message) => {
+                      if (!selectedConversation) return;
+                      setPending(true);
+                      const result = await replyToConversation(selectedConversation.id, message);
+                      setConversations((current) => current.map((conv) => conv.id === selectedConversation.id ? { ...conv, last_message: message, last_message_at: new Date().toISOString() } : conv));
+                      toast('Resposta enviada com sucesso.');
+                      setPending(false);
+                      return result.message;
+                    }} onUpdateStatus={async (status) => {
+                      if (!selectedConversation) return;
+                      await updateConversationStatus(selectedConversation.id, status);
+                      setConversations((current) => current.map((conv) => conv.id === selectedConversation.id ? { ...conv, status } : conv));
+                      toast('Status atualizado.');
+                    }} onToggleBot={async (enabled) => {
+                      if (!selectedConversation) return;
+                      await updateConversationBot(selectedConversation.id, enabled);
+                      setConversations((current) => current.map((conv) => conv.id === selectedConversation.id ? { ...conv, botEnabled: enabled } : conv));
+                      toast(`Bot ${enabled ? 'ativado' : 'desativado'} nesta conversa.`);
+                    }} />
+                  </div>
+                  <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
+                    <ContactDetails conversation={selectedConversation} />
+                  </div>
+                </section>
+              )}
+            </section>
           )}
 
           {activeSection === 'settings' && settings && (
@@ -276,7 +298,7 @@ export default function Home() {
                 }`}
               >
                 <Icon size={18} />
-                <span className="max-w-full truncate">{section.label.replace('Configurar ', '').replace('Base de ', '')}</span>
+                <span className="max-w-full truncate">{section.label.replace('Configurar ', '')}</span>
               </button>
             );
           })}

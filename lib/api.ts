@@ -5,6 +5,8 @@ import type {
   BotConfig,
   Conversation,
   DashboardSummary,
+  KnowledgeFile,
+  KnowledgeFileUpload,
   KnowledgeItem,
   Message,
   Settings,
@@ -276,6 +278,34 @@ export async function deleteKnowledge(id: string) {
   return apiRequest<{ success: true }>(`/knowledge/${id}`, {
     method: 'DELETE',
   });
+}
+
+export async function getKnowledgeFiles(): Promise<KnowledgeFile[]> {
+  return apiRequest('/knowledge-files');
+}
+
+export async function createKnowledgeFile(file: KnowledgeFileUpload) {
+  return apiRequest<KnowledgeFile>('/knowledge-files', {
+    method: 'POST',
+    body: JSON.stringify(file),
+  });
+}
+
+export async function updateKnowledgeFile(id: string, updates: Partial<Pick<KnowledgeFile, 'title' | 'description' | 'extracted_text' | 'active'>>) {
+  return apiRequest<KnowledgeFile>(`/knowledge-files/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteKnowledgeFile(id: string) {
+  return apiRequest<{ success: true }>(`/knowledge-files/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getKnowledgeFileUrl(id: string) {
+  return apiRequest<{ url: string }>(`/knowledge-files/${id}/url`);
 }
 
 export async function getWhatsappStatus(): Promise<WhatsAppStatus> {

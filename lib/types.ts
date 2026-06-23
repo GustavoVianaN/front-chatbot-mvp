@@ -88,6 +88,33 @@ export type KnowledgeItem = {
   updated_at: string;
 };
 
+export type KnowledgeFile = {
+  id: string;
+  company_id: string;
+  title: string;
+  description: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  s3_bucket: string;
+  s3_key: string;
+  extracted_text: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KnowledgeFileUpload = {
+  title: string;
+  description: string;
+  extracted_text: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  data_url: string;
+  active: boolean;
+};
+
 export type DashboardSummary = {
   botEnabled: boolean;
   whatsappConnected: boolean;
