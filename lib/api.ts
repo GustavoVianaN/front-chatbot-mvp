@@ -256,6 +256,13 @@ export async function generateBotTestResponse(data: BotConfig, userMessage: stri
   return payload.response;
 }
 
+export async function askBella(message: string, conversationContext: Array<{ role: 'user' | 'assistant'; text: string }>) {
+  return apiRequest<{ response: string }>('/panel-assistant/message', {
+    method: 'POST',
+    body: JSON.stringify({ message, conversationContext }),
+  });
+}
+
 export async function getKnowledge(): Promise<KnowledgeItem[]> {
   return apiRequest('/knowledge');
 }

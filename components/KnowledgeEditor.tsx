@@ -16,13 +16,14 @@ type FileDraft = {
   title: string;
   description: string;
   extracted_text: string;
-  file: File | null;
+  files: File[];
 };
 
 const categories = ['Horários', 'Preços', 'Serviços', 'Localização', 'Políticas', 'FAQ', 'Geral'] as const;
 const allowedFileTypes = new Set(['application/pdf', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
 const maxFileBytes = 5 * 1024 * 1024;
-const emptyFileDraft: FileDraft = { title: '', description: '', extracted_text: '', file: null };
+const maxFilesPerUpload = 100;
+const emptyFileDraft: FileDraft = { title: '', description: '', extracted_text: '', files: [] };
 
 function formatFileSize(size: number) {
   if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
@@ -86,53 +87,70 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir este item da base de conhecimento?')) return;
+    if (!window.confirm('Tem certeza que deseja excluir este texto dos arquivos do cliente?')) return;
     await deleteKnowledge(id);
     onChange(knowledge.filter((item) => item.id !== id));
   };
 
-  const handleFileSelect = (file: File | null) => {
+  const handleFileSelect = (selectedFiles: FileList | null) => {
     setFileError('');
-    if (!file) {
-      setFileDraft((current) => ({ ...current, file: null }));
+    const nextFiles = Array.from(selectedFiles || []);
+
+    if (nextFiles.length === 0) {
+      setFileDraft((current) => ({ ...current, files: [] }));
       return;
     }
 
-    if (!allowedFileTypes.has(file.type)) {
+    if (nextFiles.length > maxFilesPerUpload) {
+      setFileError(`Selecione no máximo ${maxFilesPerUpload} arquivos por envio.`);
+      return;
+    }
+
+    const invalidType = nextFiles.find((file) => !allowedFileTypes.has(file.type));
+    if (invalidType) {
       setFileError('Formato não permitido. Use PNG, JPG, WEBP, GIF ou PDF.');
       return;
     }
 
-    if (file.size > maxFileBytes) {
+    const oversizedFile = nextFiles.find((file) => file.size > maxFileBytes);
+    if (oversizedFile) {
       setFileError('Cada arquivo deve ter no máximo 5 MB.');
       return;
     }
 
     setFileDraft((current) => ({
       ...current,
-      title: current.title || file.name.replace(/\.[^.]+$/, ''),
-      file,
+      title: nextFiles.length === 1 ? current.title || nextFiles[0].name.replace(/\.[^.]+$/, '') : current.title,
+      files: nextFiles,
     }));
   };
 
   const handleUploadFile = async () => {
-    if (!fileDraft.file || !fileDraft.title.trim() || uploading) return;
+    if (fileDraft.files.length === 0 || uploading) return;
     setFileError('');
     setUploading(true);
 
     try {
-      const payload: KnowledgeFileUpload = {
-        title: fileDraft.title.trim(),
-        description: fileDraft.description.trim(),
-        extracted_text: fileDraft.extracted_text.trim(),
-        original_filename: fileDraft.file.name,
-        mime_type: fileDraft.file.type,
-        size_bytes: fileDraft.file.size,
-        data_url: await readFileAsDataUrl(fileDraft.file),
-        active: true,
-      };
-      const created = await createKnowledgeFile(payload);
-      onFilesChange([created, ...files]);
+      const createdFiles: KnowledgeFile[] = [];
+
+      for (const file of fileDraft.files) {
+        const payload: KnowledgeFileUpload = {
+          title: fileDraft.files.length === 1 && fileDraft.title.trim()
+            ? fileDraft.title.trim()
+            : file.name.replace(/\.[^.]+$/, ''),
+          description: fileDraft.description.trim(),
+          extracted_text: fileDraft.extracted_text.trim(),
+          original_filename: file.name,
+          mime_type: file.type,
+          size_bytes: file.size,
+          data_url: await readFileAsDataUrl(file),
+          active: true,
+        };
+        const created = await createKnowledgeFile(payload);
+        createdFiles.push(created);
+      }
+
+      onFilesChange([...createdFiles.reverse(), ...files]);
       setFileDraft(emptyFileDraft);
     } catch (error) {
       setFileError(error instanceof Error ? error.message : 'Não foi possível enviar o arquivo.');
@@ -162,8 +180,8 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
       <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Base de Conhecimento</p>
-            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Conteúdo e arquivos do cliente</h2>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Arquivos</p>
+            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Arquivos e informações do cliente</h2>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full sm:max-w-xs">
@@ -184,7 +202,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
           <div className="space-y-4">
-            <p className="text-sm font-semibold text-white">Texto pesquisável</p>
+            <p className="text-sm font-semibold text-white">Informação para o bot</p>
             <label className="space-y-2 text-sm text-slate-300">
               Título
               <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
@@ -215,10 +233,10 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
           </div>
 
           <div className="space-y-4">
-            <p className="text-sm font-semibold text-white">Arquivo no S3</p>
+            <p className="text-sm font-semibold text-white">Arquivo do cliente</p>
             <label className="space-y-2 text-sm text-slate-300">
               Título
-              <input value={fileDraft.title} onChange={(event) => setFileDraft((current) => ({ ...current, title: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+              <input value={fileDraft.title} onChange={(event) => setFileDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Opcional quando enviar vários arquivos" className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
             </label>
             <label className="space-y-2 text-sm text-slate-300">
               Descrição
@@ -229,18 +247,26 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
               <textarea value={fileDraft.extracted_text} onChange={(event) => setFileDraft((current) => ({ ...current, extracted_text: event.target.value }))} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
             </label>
             <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-500">
-              <Paperclip size={16} /> {fileDraft.file ? fileDraft.file.name : 'Selecionar PNG, JPG, WEBP, GIF ou PDF'}
+              <Paperclip size={16} /> {fileDraft.files.length > 0 ? `${fileDraft.files.length} arquivo(s) selecionado(s)` : 'Selecionar até 100 PNG, JPG, WEBP, GIF ou PDF'}
               <input
                 type="file"
+                multiple
                 accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf"
-                onChange={(event) => handleFileSelect(event.target.files?.[0] || null)}
+                onChange={(event) => handleFileSelect(event.target.files)}
                 className="hidden"
               />
             </label>
-            {fileDraft.file && <p className="text-xs text-slate-500">{formatFileSize(fileDraft.file.size)}</p>}
+            {fileDraft.files.length > 0 && (
+              <div className="max-h-32 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
+                {fileDraft.files.slice(0, 8).map((file) => (
+                  <p key={`${file.name}-${file.size}`} className="truncate">{file.name} · {formatFileSize(file.size)}</p>
+                ))}
+                {fileDraft.files.length > 8 && <p className="mt-1 text-slate-500">+ {fileDraft.files.length - 8} arquivo(s)</p>}
+              </div>
+            )}
             {fileError && <p className="text-sm text-rose-300">{fileError}</p>}
-            <button type="button" onClick={handleUploadFile} disabled={!fileDraft.file || !fileDraft.title.trim() || uploading} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 sm:w-auto">
-              <CheckCircle2 size={16} /> {uploading ? 'Enviando...' : 'Enviar arquivo'}
+            <button type="button" onClick={handleUploadFile} disabled={fileDraft.files.length === 0 || uploading} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 sm:w-auto">
+              <CheckCircle2 size={16} /> {uploading ? `Enviando ${fileDraft.files.length} arquivo(s)...` : 'Enviar arquivo(s)'}
             </button>
           </div>
         </div>
@@ -248,7 +274,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
 
       <div className="grid gap-6 xl:grid-cols-2">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
-          <p className="text-sm font-semibold text-white">Textos cadastrados</p>
+          <p className="text-sm font-semibold text-white">Informações cadastradas</p>
           <div className="mt-4 grid gap-4">
             {filtered.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/60 p-8 text-center text-slate-400">Nenhum item encontrado.</div>
@@ -284,7 +310,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
-          <p className="text-sm font-semibold text-white">Arquivos no S3</p>
+          <p className="text-sm font-semibold text-white">Arquivos cadastrados</p>
           <div className="mt-4 grid gap-4">
             {filteredFiles.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/60 p-8 text-center text-slate-400">Nenhum arquivo encontrado.</div>

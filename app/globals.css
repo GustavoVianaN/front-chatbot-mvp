@@ -68,6 +68,7 @@ select {
 .theme-light .bg-slate-950\/95,
 .theme-light .bg-slate-950\/98,
 .theme-light .bg-slate-950\/80,
+.theme-light .bg-slate-950\/70,
 .theme-light .bg-slate-950\/60 {
   background-color: #f8fafc !important;
 }
@@ -135,4 +136,29 @@ select {
 
 .theme-light .shadow-panel {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+@keyframes bellaHint {
+  0%, 22% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  34%, 78% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.bella-hint {
+  animation: bellaHint 5s ease-in-out infinite;
+}
+
+.theme-light .bella-hint {
+  background-color: #ffffff;
+  color: #0f172a;
+  border-color: #a7f3d0;
 }

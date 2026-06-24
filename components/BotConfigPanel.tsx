@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, MessageCircle, RotateCcw, Send, TestTube2, X } from 'lucide-react';
+import { CheckCircle2, MessageCircle, RotateCcw, Send, TestTube2 } from 'lucide-react';
 import type { BotConfig } from '@/lib/types';
 import { generateBotTestResponse } from '@/lib/api';
 
@@ -9,6 +9,7 @@ type BotConfigPanelProps = {
   botConfig: BotConfig;
   onSave: (data: BotConfig) => Promise<void>;
   onRefresh: () => Promise<BotConfig>;
+  mode?: 'simulation' | 'config';
 };
 
 type TestMessage = {
@@ -23,11 +24,10 @@ function formatConversationContext(messages: TestMessage[]) {
     .join('\n');
 }
 
-export default function BotConfigPanel({ botConfig, onSave, onRefresh }: BotConfigPanelProps) {
+export default function BotConfigPanel({ botConfig, onSave, onRefresh, mode = 'config' }: BotConfigPanelProps) {
   const [form, setForm] = useState<BotConfig>(botConfig);
   const [testMessage, setTestMessage] = useState('');
   const [testMessages, setTestMessages] = useState<TestMessage[]>([]);
-  const [simulationOpen, setSimulationOpen] = useState(false);
   const [testing, setTesting] = useState(false);
   const [refreshingSimulation, setRefreshingSimulation] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -92,6 +92,83 @@ export default function BotConfigPanel({ botConfig, onSave, onRefresh }: BotConf
       setTesting(false);
     }
   };
+
+  if (mode === 'simulation') {
+    return (
+      <div className="space-y-6">
+        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-panel sm:rounded-3xl">
+          <div className="flex flex-col gap-4 border-b border-slate-800 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600/20 text-emerald-300">
+                <TestTube2 size={20} />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white">Simulação do bot</p>
+                <p className="truncate text-xs text-slate-400">{form.assistant_name || 'Bot'} - conversa de teste do cliente</p>
+              </div>
+            </div>
+            <button type="button" onClick={resetSimulation} disabled={refreshingSimulation} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto">
+              <RotateCcw size={16} />
+              Nova conversa
+            </button>
+          </div>
+
+          <div className="flex min-h-[520px] flex-col gap-3 overflow-y-auto bg-slate-950/70 p-4 sm:p-5">
+            {testMessages.length === 0 ? (
+              <div className="m-auto max-w-sm text-center text-sm leading-6 text-slate-400">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-emerald-300">
+                  <MessageCircle size={20} />
+                </div>
+                <p className="mt-4 text-base font-medium text-white">Nova conversa iniciada</p>
+                <p className="mt-2">{refreshingSimulation ? 'Recarregando configuração do banco...' : 'Digite como cliente para testar respostas, memória e comportamento do bot.'}</p>
+              </div>
+            ) : (
+              testMessages.map((message) => {
+                const isCustomer = message.role === 'customer';
+
+                return (
+                  <div key={message.id} className={`max-w-[86%] rounded-2xl px-4 py-3 text-sm leading-6 ${isCustomer ? 'self-end bg-emerald-600 text-white' : 'self-start bg-slate-800 text-slate-100'}`}>
+                    <p className="whitespace-pre-line break-words">{message.text}</p>
+                  </div>
+                );
+              })
+            )}
+            {testing && (
+              <div className="max-w-[86%] self-start rounded-2xl bg-slate-800 px-4 py-3 text-sm text-slate-300">
+                Digitando...
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-slate-800 bg-slate-900/90 p-3 sm:p-4">
+            <div className="flex gap-2">
+              <textarea
+                value={testMessage}
+                onChange={(event) => setTestMessage(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    void sendTestMessage();
+                  }
+                }}
+                rows={2}
+                placeholder="Digite como cliente..."
+                className="min-h-[52px] flex-1 resize-none rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500"
+              />
+              <button type="button" onClick={sendTestMessage} disabled={!testMessage.trim() || testing} className="inline-flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700" aria-label="Enviar mensagem">
+                <Send size={17} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-300 sm:rounded-3xl sm:p-6">
+          <p className="font-semibold text-white">Como testar</p>
+          <p className="mt-2 leading-6">Use “Nova conversa” para simular outro usuário. A simulação recarrega a configuração atual do banco e mantém memória só dentro desta conversa de teste.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -191,7 +268,7 @@ export default function BotConfigPanel({ botConfig, onSave, onRefresh }: BotConf
           </label>
           <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
             <input type="checkbox" checked={form.knowledge_only} onChange={(event) => handleChange('knowledge_only', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />
-            Usar apenas base de conhecimento
+            Responder apenas com informações dos arquivos
           </label>
           <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
             <input type="checkbox" checked={form.prompt_injection_protection} onChange={(event) => handleChange('prompt_injection_protection', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />
@@ -199,89 +276,6 @@ export default function BotConfigPanel({ botConfig, onSave, onRefresh }: BotConf
           </label>
         </div>
       </div>
-
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Simulação</p>
-            <p className="mt-3 text-sm text-slate-400">Abra uma conversa de teste com memória local.</p>
-          </div>
-          <button type="button" onClick={() => setSimulationOpen(true)} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-800 px-4 py-3 text-sm text-white transition hover:bg-slate-700 sm:w-auto">
-            <TestTube2 size={16} /> Abrir simulação
-          </button>
-        </div>
-      </div>
-
-      {simulationOpen && (
-        <div className="fixed inset-0 z-50 flex items-end bg-slate-950/80 px-3 py-4 backdrop-blur-sm sm:items-center sm:justify-center sm:p-6">
-          <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl sm:rounded-3xl">
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 sm:px-5">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-600/20 text-emerald-300">
-                  <MessageCircle size={18} />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">Conversa de simulação</p>
-                  <p className="truncate text-xs text-slate-400">{form.assistant_name || 'Bot'} - usuário de teste</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={resetSimulation} disabled={refreshingSimulation} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-700 text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60" aria-label="Resetar conversa e recarregar configuração">
-                  <RotateCcw size={16} />
-                </button>
-                <button type="button" onClick={() => setSimulationOpen(false)} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-700 text-slate-300 transition hover:bg-slate-800" aria-label="Fechar simulação">
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex min-h-[360px] flex-1 flex-col gap-3 overflow-y-auto bg-slate-950/70 p-4 sm:p-5">
-              {testMessages.length === 0 ? (
-                <div className="m-auto max-w-sm text-center text-sm leading-6 text-slate-400">
-                  <p className="text-base font-medium text-white">Nova conversa iniciada</p>
-                  <p className="mt-2">{refreshingSimulation ? 'Recarregando configuração do banco...' : 'As mensagens enviadas aqui entram no contexto até você resetar.'}</p>
-                </div>
-              ) : (
-                testMessages.map((message) => {
-                  const isCustomer = message.role === 'customer';
-
-                  return (
-                    <div key={message.id} className={`max-w-[86%] rounded-2xl px-4 py-3 text-sm leading-6 ${isCustomer ? 'self-end bg-emerald-600 text-white' : 'self-start bg-slate-800 text-slate-100'}`}>
-                      <p className="whitespace-pre-line break-words">{message.text}</p>
-                    </div>
-                  );
-                })
-              )}
-              {testing && (
-                <div className="max-w-[86%] self-start rounded-2xl bg-slate-800 px-4 py-3 text-sm text-slate-300">
-                  Digitando...
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-slate-800 p-3 sm:p-4">
-              <div className="flex gap-2">
-                <textarea
-                  value={testMessage}
-                  onChange={(event) => setTestMessage(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault();
-                      void sendTestMessage();
-                    }
-                  }}
-                  rows={2}
-                  placeholder="Digite como cliente..."
-                  className="min-h-[52px] flex-1 resize-none rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500"
-                />
-                <button type="button" onClick={sendTestMessage} disabled={!testMessage.trim() || testing} className="inline-flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700" aria-label="Enviar mensagem">
-                  <Send size={17} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-300 sm:rounded-3xl sm:p-6">
         <p className="font-semibold text-white">Nota</p>

@@ -20,6 +20,7 @@ import BotConfigPanel from '@/components/BotConfigPanel';
 import KnowledgeEditor from '@/components/KnowledgeEditor';
 import WhatsAppStatusPanel from '@/components/WhatsAppStatusPanel';
 import SettingsPanel from '@/components/SettingsPanel';
+import BellaAssistant from '@/components/BellaAssistant';
 import { toast } from '@/components/Toast';
 
 const sections = [
@@ -30,13 +31,13 @@ const sections = [
 ] as const;
 
 type SectionId = (typeof sections)[number]['id'];
-type BotConfigTab = 'config' | 'knowledge';
+type BotConfigTab = 'simulation' | 'config' | 'knowledge';
 type WhatsappTab = 'status' | 'conversations';
 type ThemeMode = 'dark' | 'light';
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
-  const [botConfigTab, setBotConfigTab] = useState<BotConfigTab>('config');
+  const [botConfigTab, setBotConfigTab] = useState<BotConfigTab>('simulation');
   const [whatsappTab, setWhatsappTab] = useState<WhatsappTab>('status');
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [dashboard, setDashboard] = useState<Awaited<ReturnType<typeof getDashboard>> | null>(null);
@@ -166,8 +167,6 @@ export default function Home() {
                 <MetricCard label="Respostas IA" value={dashboard.iaResponses.toString()} />
                 <MetricCard label="Conversas abertas" value={dashboard.openConversations.toString()} />
                 <MetricCard label="Conversas resolvidas" value={dashboard.resolvedConversations.toString()} />
-                <MetricCard label="Erros recentes" value={dashboard.recentErrors.toString()} tone={dashboard.recentErrors ? 'danger' : 'success'} />
-                <MetricCard label="Uso estimado IA" value={dashboard.estimatedUsage} />
               </div>
 
               <div className="grid gap-4 xl:gap-6">
@@ -189,20 +188,25 @@ export default function Home() {
               <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-4">
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Configurar Bot</p>
-                  <h1 className="mt-1 text-xl font-semibold text-white">Bot e base de conhecimento</h1>
+                  <h1 className="mt-1 text-xl font-semibold text-white">Bot e arquivos</h1>
                 </div>
-                <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-1 sm:w-auto">
+                <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-1 sm:w-auto">
+                  <button type="button" onClick={() => setBotConfigTab('simulation')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${botConfigTab === 'simulation' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                    Simulação
+                  </button>
                   <button type="button" onClick={() => setBotConfigTab('config')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${botConfigTab === 'config' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}>
                     Configurações
                   </button>
                   <button type="button" onClick={() => setBotConfigTab('knowledge')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${botConfigTab === 'knowledge' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}>
-                    Base
+                    Arquivos
                   </button>
                 </div>
               </div>
 
-              {botConfigTab === 'config' ? (
-                <BotConfigPanel botConfig={botConfig} onSave={async (data) => {
+              {botConfigTab === 'knowledge' ? (
+                <KnowledgeEditor knowledge={knowledge} onChange={setKnowledge} files={knowledgeFiles} onFilesChange={setKnowledgeFiles} />
+              ) : (
+                <BotConfigPanel mode={botConfigTab} botConfig={botConfig} onSave={async (data) => {
                   setPending(true);
                   const updated = await updateBotConfig(data);
                   setBotConfig(updated);
@@ -213,8 +217,6 @@ export default function Home() {
                   setBotConfig(latestConfig);
                   return latestConfig;
                 }} />
-              ) : (
-                <KnowledgeEditor knowledge={knowledge} onChange={setKnowledge} files={knowledgeFiles} onFilesChange={setKnowledgeFiles} />
               )}
             </section>
           )}
@@ -283,6 +285,7 @@ export default function Home() {
           )}
         </div>
       </main>
+      <BellaAssistant />
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur-xl lg:hidden">
         <div className="flex gap-1 overflow-x-auto pb-2">
           {sections.map((section) => {
