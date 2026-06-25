@@ -8,8 +8,11 @@ import type {
   KnowledgeFile,
   KnowledgeFileUpload,
   KnowledgeItem,
+  KnowledgeSource,
+  KnowledgeSourceInput,
   Message,
   Settings,
+  SimulationLog,
   WhatsAppStatus,
 } from './types';
 
@@ -247,13 +250,17 @@ export async function updateBotConfig(data: BotConfig): Promise<BotConfig> {
   });
 }
 
-export async function generateBotTestResponse(data: BotConfig, userMessage: string, conversationContext?: string) {
-  const payload = await apiRequest<{ response: string }>('/bot-config/test', {
+export async function generateBotTestResponse(data: BotConfig, userMessage: string, conversationContext?: string, simulationId?: string) {
+  const payload = await apiRequest<{ response: string; simulationId: string; log: SimulationLog }>('/bot-config/test', {
     method: 'POST',
-    body: JSON.stringify({ botConfig: data, message: userMessage, conversationContext }),
+    body: JSON.stringify({ botConfig: data, message: userMessage, conversationContext, simulationId }),
   });
 
-  return payload.response;
+  return payload;
+}
+
+export async function getSimulationLogs(): Promise<SimulationLog[]> {
+  return apiRequest('/simulation-logs');
 }
 
 export async function askBella(message: string, conversationContext: Array<{ role: 'user' | 'assistant'; text: string }>) {
@@ -315,8 +322,73 @@ export async function getKnowledgeFileUrl(id: string) {
   return apiRequest<{ url: string }>(`/knowledge-files/${id}/url`);
 }
 
+export async function getKnowledgeSources(): Promise<KnowledgeSource[]> {
+  return apiRequest('/knowledge-sources');
+}
+
+export async function createKnowledgeSource(source: KnowledgeSourceInput) {
+  return apiRequest<KnowledgeSource>('/knowledge-sources', {
+    method: 'POST',
+    body: JSON.stringify(source),
+  });
+}
+
+export async function updateKnowledgeSource(id: string, updates: Partial<Pick<KnowledgeSource, 'title' | 'source_type' | 'url' | 'description' | 'extracted_text' | 'active'>>) {
+  return apiRequest<KnowledgeSource>(`/knowledge-sources/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function syncKnowledgeSource(id: string) {
+  return apiRequest<KnowledgeSource>(`/knowledge-sources/${id}/sync`, {
+    method: 'POST',
+  });
+}
+
+export async function deleteKnowledgeSource(id: string) {
+  return apiRequest<{ success: true }>(`/knowledge-sources/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function getWhatsappStatus(): Promise<WhatsAppStatus> {
-  return apiRequest('/whatsapp/status');
+  const status = await apiRequest<WhatsAppStatus & { web?: WhatsAppStatus['web'] }>('/whatsapp/status');
+
+  return {
+    ...status,
+    web: status.web || {
+      enabled: false,
+      status: 'disconnected',
+      qrCode: '',
+      phoneNumber: '',
+      lastError: '',
+      connectedAt: '',
+      disconnectedAt: '',
+      sendDelayMs: 2500,
+      reconnecting: false,
+      warning: 'WhatsApp Web não garante 100% de uptime. Use monitoramento e reconecte quando necessário.',
+    },
+  };
+}
+
+export async function startWhatsappWeb(): Promise<WhatsAppStatus['web']> {
+  return apiRequest('/whatsapp-web/start', {
+    method: 'POST',
+  });
+}
+
+export async function disconnectWhatsappWeb(): Promise<WhatsAppStatus['web']> {
+  return apiRequest('/whatsapp-web/disconnect', {
+    method: 'POST',
+  });
+}
+
+export async function testWhatsappWebMessage(to: string, message: string) {
+  return apiRequest<{ success: true; to: string; queuedDelayMs: number }>('/whatsapp-web/test-message', {
+    method: 'POST',
+    body: JSON.stringify({ to, message }),
+  });
 }
 
 export async function getSettings(): Promise<Settings> {

@@ -1,15 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CheckCircle2, ExternalLink, FileText, Image as ImageIcon, Paperclip, Search, Trash2 } from 'lucide-react';
-import type { KnowledgeFile, KnowledgeFileUpload, KnowledgeItem } from '@/lib/types';
-import { createKnowledge, createKnowledgeFile, deleteKnowledge, deleteKnowledgeFile, getKnowledgeFileUrl, updateKnowledge, updateKnowledgeFile } from '@/lib/api';
+import { CheckCircle2, ExternalLink, FileText, Image as ImageIcon, Link, Paperclip, RefreshCw, Search, Trash2 } from 'lucide-react';
+import type { KnowledgeFile, KnowledgeFileUpload, KnowledgeItem, KnowledgeSource, KnowledgeSourceInput } from '@/lib/types';
+import { createKnowledge, createKnowledgeFile, createKnowledgeSource, deleteKnowledge, deleteKnowledgeFile, deleteKnowledgeSource, getKnowledgeFileUrl, syncKnowledgeSource, updateKnowledge, updateKnowledgeFile, updateKnowledgeSource } from '@/lib/api';
 
 type KnowledgeEditorProps = {
   knowledge: KnowledgeItem[];
   onChange: (items: KnowledgeItem[]) => void;
   files: KnowledgeFile[];
   onFilesChange: (files: KnowledgeFile[]) => void;
+  sources: KnowledgeSource[];
+  onSourcesChange: (sources: KnowledgeSource[]) => void;
 };
 
 type FileDraft = {
@@ -19,11 +21,19 @@ type FileDraft = {
   files: File[];
 };
 
+type LinkDraft = {
+  title: string;
+  source_type: string;
+  url: string;
+  description: string;
+};
+
 const categories = ['Horários', 'Preços', 'Serviços', 'Localização', 'Políticas', 'FAQ', 'Geral'] as const;
 const allowedFileTypes = new Set(['application/pdf', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
 const maxFileBytes = 5 * 1024 * 1024;
 const maxFilesPerUpload = 100;
 const emptyFileDraft: FileDraft = { title: '', description: '', extracted_text: '', files: [] };
+const emptyLinkDraft: LinkDraft = { title: '', source_type: 'google_sheets', url: '', description: '' };
 
 function formatFileSize(size: number) {
   if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
@@ -43,14 +53,17 @@ function isImageFile(file: KnowledgeFile) {
   return file.mime_type.startsWith('image/');
 }
 
-export default function KnowledgeEditor({ knowledge, onChange, files, onFilesChange }: KnowledgeEditorProps) {
+export default function KnowledgeEditor({ knowledge, onChange, files, onFilesChange, sources, onSourcesChange }: KnowledgeEditorProps) {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('Todas');
   const [editing, setEditing] = useState<KnowledgeItem | null>(null);
   const [draft, setDraft] = useState({ title: '', category: 'Horários', content: '' });
   const [fileDraft, setFileDraft] = useState<FileDraft>(emptyFileDraft);
   const [fileError, setFileError] = useState('');
+  const [linkDraft, setLinkDraft] = useState<LinkDraft>(emptyLinkDraft);
+  const [linkError, setLinkError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [savingLink, setSavingLink] = useState(false);
 
   const filtered = useMemo(() => {
     return knowledge.filter((item) => {
@@ -70,6 +83,17 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
       file.mime_type,
     ].join(' ').toLowerCase().includes(value));
   }, [files, search]);
+
+  const filteredSources = useMemo(() => {
+    const value = search.toLowerCase();
+    return sources.filter((source) => [
+      source.title,
+      source.description,
+      source.url,
+      source.source_type,
+      source.extracted_text,
+    ].join(' ').toLowerCase().includes(value));
+  }, [sources, search]);
 
   const handleSave = async () => {
     if (!draft.title || !draft.content) return;
@@ -175,6 +199,45 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const handleCreateSource = async () => {
+    if (!linkDraft.title.trim() || !linkDraft.url.trim() || savingLink) return;
+    setLinkError('');
+    setSavingLink(true);
+
+    try {
+      const payload: KnowledgeSourceInput = {
+        title: linkDraft.title.trim(),
+        source_type: linkDraft.source_type,
+        url: linkDraft.url.trim(),
+        description: linkDraft.description.trim(),
+        active: true,
+      };
+      const created = await createKnowledgeSource(payload);
+      onSourcesChange([created, ...sources]);
+      setLinkDraft(emptyLinkDraft);
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : 'Não foi possível sincronizar o link.');
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleDeleteSource = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este link?')) return;
+    await deleteKnowledgeSource(id);
+    onSourcesChange(sources.filter((source) => source.id !== id));
+  };
+
+  const handleToggleSource = async (source: KnowledgeSource) => {
+    const updated = await updateKnowledgeSource(source.id, { active: !source.active });
+    onSourcesChange(sources.map((item) => (item.id === updated.id ? updated : item)));
+  };
+
+  const handleSyncSource = async (source: KnowledgeSource) => {
+    const updated = await syncKnowledgeSource(source.id);
+    onSourcesChange(sources.map((item) => (item.id === updated.id ? updated : item)));
+  };
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
@@ -200,7 +263,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <div className="mt-6 grid gap-6 xl:grid-cols-3">
           <div className="space-y-4">
             <p className="text-sm font-semibold text-white">Informação para o bot</p>
             <label className="space-y-2 text-sm text-slate-300">
@@ -269,10 +332,39 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
               <CheckCircle2 size={16} /> {uploading ? `Enviando ${fileDraft.files.length} arquivo(s)...` : 'Enviar arquivo(s)'}
             </button>
           </div>
+
+          <div className="space-y-4">
+            <p className="text-sm font-semibold text-white">Link público</p>
+            <label className="space-y-2 text-sm text-slate-300">
+              Nome
+              <input value={linkDraft.title} onChange={(event) => setLinkDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Tabela de preços" className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            </label>
+            <label className="space-y-2 text-sm text-slate-300">
+              Tipo
+              <select value={linkDraft.source_type} onChange={(event) => setLinkDraft((current) => ({ ...current, source_type: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500">
+                <option value="google_sheets">Google Sheets</option>
+                <option value="csv">CSV público</option>
+                <option value="page">Página pública</option>
+                <option value="other">Outro link</option>
+              </select>
+            </label>
+            <label className="space-y-2 text-sm text-slate-300">
+              URL
+              <input value={linkDraft.url} onChange={(event) => setLinkDraft((current) => ({ ...current, url: event.target.value }))} placeholder="https://docs.google.com/spreadsheets/..." className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            </label>
+            <label className="space-y-2 text-sm text-slate-300">
+              Descrição
+              <textarea value={linkDraft.description} onChange={(event) => setLinkDraft((current) => ({ ...current, description: event.target.value }))} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            </label>
+            {linkError && <p className="text-sm text-rose-300">{linkError}</p>}
+            <button type="button" onClick={handleCreateSource} disabled={!linkDraft.title.trim() || !linkDraft.url.trim() || savingLink} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 sm:w-auto">
+              <Link size={16} /> {savingLink ? 'Sincronizando...' : 'Adicionar link'}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-3">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
           <p className="text-sm font-semibold text-white">Informações cadastradas</p>
           <div className="mt-4 grid gap-4">
@@ -336,6 +428,46 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
                       {file.active ? 'Desativar' : 'Ativar'}
                     </button>
                     <button type="button" onClick={() => handleDeleteFile(file.id)} className="rounded-2xl border border-rose-600/40 bg-rose-600/10 px-3 py-2 text-xs text-rose-200 transition hover:bg-rose-600/20">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+          <p className="text-sm font-semibold text-white">Links cadastrados</p>
+          <div className="mt-4 grid gap-4">
+            {filteredSources.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/60 p-8 text-center text-slate-400">Nenhum link encontrado.</div>
+            ) : (
+              filteredSources.map((source) => (
+                <div key={source.id} className="rounded-3xl border border-slate-800 bg-slate-950/80 p-4">
+                  <div className="flex gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-slate-400">
+                      <Link size={20} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">{source.title}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{source.source_type} · {source.last_synced_at ? new Date(source.last_synced_at).toLocaleString('pt-BR') : 'não sincronizado'}</p>
+                      <p className="mt-2 truncate text-xs text-slate-500">{source.url}</p>
+                      {source.description && <p className="mt-3 text-sm leading-6 text-slate-300">{source.description}</p>}
+                      {source.extracted_text && <p className="mt-3 line-clamp-4 whitespace-pre-line text-xs leading-5 text-slate-400">{source.extracted_text}</p>}
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => window.open(source.url, '_blank', 'noopener,noreferrer')} className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-500">
+                      <ExternalLink size={13} /> Abrir
+                    </button>
+                    <button type="button" onClick={() => handleSyncSource(source)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-500">
+                      <RefreshCw size={13} /> Sincronizar
+                    </button>
+                    <button type="button" onClick={() => handleToggleSource(source)} className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-500">
+                      {source.active ? 'Desativar' : 'Ativar'}
+                    </button>
+                    <button type="button" onClick={() => handleDeleteSource(source.id)} className="rounded-2xl border border-rose-600/40 bg-rose-600/10 px-3 py-2 text-xs text-rose-200 transition hover:bg-rose-600/20">
                       <Trash2 size={14} />
                     </button>
                   </div>

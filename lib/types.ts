@@ -115,6 +115,43 @@ export type KnowledgeFileUpload = {
   active: boolean;
 };
 
+export type KnowledgeSource = {
+  id: string;
+  company_id: string;
+  title: string;
+  source_type: string;
+  url: string;
+  description: string;
+  extracted_text: string;
+  active: boolean;
+  last_synced_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KnowledgeSourceInput = {
+  title: string;
+  source_type: string;
+  url: string;
+  description: string;
+  active: boolean;
+};
+
+export type SimulationLog = {
+  id: string;
+  company_id: string;
+  bot_config_id: string;
+  user_id: string;
+  simulation_id: string;
+  turn_index: number;
+  user_message: string;
+  bot_response: string;
+  conversation_context: string;
+  assistant_name: string;
+  company_name: string;
+  created_at: string;
+};
+
 export type DashboardSummary = {
   botEnabled: boolean;
   whatsappConnected: boolean;
@@ -125,6 +162,19 @@ export type DashboardSummary = {
   recentErrors: number;
   lastMessage: string;
   estimatedUsage: string;
+};
+
+export type WhatsAppWebStatus = {
+  enabled: boolean;
+  status: 'disconnected' | 'connecting' | 'qr_pending' | 'connected';
+  qrCode: string;
+  phoneNumber: string;
+  lastError: string;
+  connectedAt: string;
+  disconnectedAt: string;
+  sendDelayMs: number;
+  reconnecting: boolean;
+  warning: string;
 };
 
 export type WhatsAppStatus = {
@@ -138,6 +188,7 @@ export type WhatsAppStatus = {
   phoneNumberConfigured: boolean;
   metaSubscription: 'Pendente' | 'Verificada';
   environment: 'produção';
+  web: WhatsAppWebStatus;
 };
 
 export type Settings = {

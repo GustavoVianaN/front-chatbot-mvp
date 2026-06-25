@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { CheckCircle2, MessageCircle, RotateCcw, Send, TestTube2 } from 'lucide-react';
-import type { BotConfig } from '@/lib/types';
-import { generateBotTestResponse } from '@/lib/api';
+import type { BotConfig, SimulationLog } from '@/lib/types';
+import { generateBotTestResponse, getSimulationLogs } from '@/lib/api';
 
 type BotConfigPanelProps = {
   botConfig: BotConfig;
@@ -24,10 +24,18 @@ function formatConversationContext(messages: TestMessage[]) {
     .join('\n');
 }
 
+function newSimulationId() {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-0000-4000-8000-${Math.random().toString(16).slice(2, 14)}`.padEnd(36, '0');
+}
+
 export default function BotConfigPanel({ botConfig, onSave, onRefresh, mode = 'config' }: BotConfigPanelProps) {
   const [form, setForm] = useState<BotConfig>(botConfig);
   const [testMessage, setTestMessage] = useState('');
   const [testMessages, setTestMessages] = useState<TestMessage[]>([]);
+  const [simulationId, setSimulationId] = useState(() => newSimulationId());
+  const [simulationLogs, setSimulationLogs] = useState<SimulationLog[]>([]);
   const [testing, setTesting] = useState(false);
   const [refreshingSimulation, setRefreshingSimulation] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -36,6 +44,14 @@ export default function BotConfigPanel({ botConfig, onSave, onRefresh, mode = 'c
     setForm(botConfig);
   }, [botConfig]);
 
+  useEffect(() => {
+    if (mode !== 'simulation') return;
+
+    getSimulationLogs()
+      .then(setSimulationLogs)
+      .catch(() => undefined);
+  }, [mode]);
+
   const handleChange = (field: keyof BotConfig, value: string | boolean) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
@@ -43,6 +59,7 @@ export default function BotConfigPanel({ botConfig, onSave, onRefresh, mode = 'c
   const resetSimulation = async () => {
     setTestMessage('');
     setTestMessages([]);
+    setSimulationId(newSimulationId());
 
     try {
       setRefreshingSimulation(true);
@@ -70,15 +87,17 @@ export default function BotConfigPanel({ botConfig, onSave, onRefresh, mode = 'c
     setTesting(true);
 
     try {
-      const response = await generateBotTestResponse(form, message, formatConversationContext(previousMessages));
+      const result = await generateBotTestResponse(form, message, formatConversationContext(previousMessages), simulationId);
+      setSimulationId(result.simulationId);
       setTestMessages((current) => [
         ...current,
         {
           id: `bot-${Date.now()}`,
           role: 'bot',
-          text: response,
+          text: result.response,
         },
       ]);
+      setSimulationLogs((current) => [result.log, ...current].slice(0, 100));
     } catch (error) {
       setTestMessages((current) => [
         ...current,
@@ -165,6 +184,49 @@ export default function BotConfigPanel({ botConfig, onSave, onRefresh, mode = 'c
         <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-300 sm:rounded-3xl sm:p-6">
           <p className="font-semibold text-white">Como testar</p>
           <p className="mt-2 leading-6">Use “Nova conversa” para simular outro usuário. A simulação recarrega a configuração atual do banco e mantém memória só dentro desta conversa de teste.</p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Histórico</p>
+              <h2 className="mt-2 text-xl font-semibold text-white">Simulações salvas</h2>
+            </div>
+            <button type="button" onClick={async () => setSimulationLogs(await getSimulationLogs())} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-slate-200 transition hover:bg-slate-800 sm:w-auto">
+              <RotateCcw size={16} />
+              Atualizar histórico
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            {simulationLogs.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/60 p-8 text-center text-sm text-slate-400">
+                Nenhuma simulação salva ainda.
+              </div>
+            ) : (
+              simulationLogs.slice(0, 12).map((log) => (
+                <div key={log.id} className="rounded-3xl border border-slate-800 bg-slate-950/80 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white">Conversa {log.simulation_id.slice(0, 8)} · Turno {log.turn_index}</p>
+                      <p className="mt-1 text-xs text-slate-500">{new Date(log.created_at).toLocaleString('pt-BR')}</p>
+                    </div>
+                    <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-300">{log.assistant_name || form.assistant_name}</span>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-2xl bg-emerald-600/10 p-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">Cliente</p>
+                      <p className="mt-2 whitespace-pre-line break-words text-sm leading-6 text-slate-100">{log.user_message}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-800 p-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Bot</p>
+                      <p className="mt-2 whitespace-pre-line break-words text-sm leading-6 text-slate-100">{log.bot_response}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     );

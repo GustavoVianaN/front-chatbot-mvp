@@ -8,8 +8,8 @@ import {
   Settings as SettingsIcon,
   Sparkles,
 } from 'lucide-react';
-import { getBotConfig, getConversations, getDashboard, getKnowledge, getKnowledgeFiles, getSettings, getWhatsappStatus, logout, replyToConversation, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
-import type { BotConfig, Conversation, KnowledgeFile, KnowledgeItem, Settings, WhatsAppStatus } from '@/lib/types';
+import { disconnectWhatsappWeb, getBotConfig, getConversations, getDashboard, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getSettings, getWhatsappStatus, logout, replyToConversation, startWhatsappWeb, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import type { BotConfig, Conversation, KnowledgeFile, KnowledgeItem, KnowledgeSource, Settings, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import MetricCard from '@/components/MetricCard';
@@ -46,6 +46,7 @@ export default function Home() {
   const [botConfig, setBotConfig] = useState<BotConfig | null>(null);
   const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
   const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>([]);
+  const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>([]);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pending, setPending] = useState(false);
@@ -53,12 +54,13 @@ export default function Home() {
   const loadPanel = async () => {
     try {
       setPending(true);
-      const [dashboardData, convos, config, knowledgeData, knowledgeFilesData, whatsapp, settingsData] = await Promise.all([
+      const [dashboardData, convos, config, knowledgeData, knowledgeFilesData, knowledgeSourcesData, whatsapp, settingsData] = await Promise.all([
         getDashboard(),
         getConversations(),
         getBotConfig(),
         getKnowledge(),
         getKnowledgeFiles(),
+        getKnowledgeSources(),
         getWhatsappStatus(),
         getSettings(),
       ]);
@@ -68,6 +70,7 @@ export default function Home() {
       setBotConfig(config);
       setKnowledge(knowledgeData);
       setKnowledgeFiles(knowledgeFilesData);
+      setKnowledgeSources(knowledgeSourcesData);
       setWhatsappStatus(whatsapp);
       setSettings(settingsData);
     } catch (error) {
@@ -89,6 +92,21 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!whatsappStatus) return;
+
+    const fastPolling = activeSection === 'whatsapp'
+      && whatsappTab === 'status'
+      && (whatsappStatus.web.status === 'connecting' || whatsappStatus.web.status === 'qr_pending');
+
+    const interval = window.setInterval(async () => {
+      const status = await getWhatsappStatus();
+      setWhatsappStatus(status);
+    }, fastPolling ? 4000 : 30000);
+
+    return () => window.clearInterval(interval);
+  }, [activeSection, whatsappStatus, whatsappTab]);
+
+  useEffect(() => {
     const savedTheme = window.localStorage.getItem('panel-theme');
     if (savedTheme === 'light' || savedTheme === 'dark') {
       setTheme(savedTheme);
@@ -106,7 +124,7 @@ export default function Home() {
     [conversations, selectedConversationId]
   );
   const companyName = botConfig?.company_name || settings?.company_name || selectedConversation?.company?.name || 'Painel de Atendimento';
-  const whatsappConnected = Boolean(whatsappStatus?.connected);
+  const whatsappConnected = Boolean(whatsappStatus?.connected || whatsappStatus?.web.status === 'connected');
 
   const handleChangeSection = (section: string) => {
     setActiveSection(section as SectionId);
@@ -121,6 +139,37 @@ export default function Home() {
     setTheme((current) => current === 'dark' ? 'light' : 'dark');
   };
 
+  const refreshWhatsappStatus = async () => {
+    const status = await getWhatsappStatus();
+    setWhatsappStatus(status);
+  };
+
+  const handleStartWhatsappWeb = async () => {
+    setPending(true);
+    try {
+      await startWhatsappWeb();
+      await refreshWhatsappStatus();
+      toast('QR Code do WhatsApp Web gerado.');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível iniciar o WhatsApp Web.');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleDisconnectWhatsappWeb = async () => {
+    setPending(true);
+    try {
+      await disconnectWhatsappWeb();
+      await refreshWhatsappStatus();
+      toast('WhatsApp Web desconectado.');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível desconectar o WhatsApp Web.');
+    } finally {
+      setPending(false);
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     setDashboard(null);
@@ -129,6 +178,7 @@ export default function Home() {
     setBotConfig(null);
     setKnowledge([]);
     setKnowledgeFiles([]);
+    setKnowledgeSources([]);
     setWhatsappStatus(null);
     setSettings(null);
     window.location.href = '/login';
@@ -204,7 +254,7 @@ export default function Home() {
               </div>
 
               {botConfigTab === 'knowledge' ? (
-                <KnowledgeEditor knowledge={knowledge} onChange={setKnowledge} files={knowledgeFiles} onFilesChange={setKnowledgeFiles} />
+                <KnowledgeEditor knowledge={knowledge} onChange={setKnowledge} files={knowledgeFiles} onFilesChange={setKnowledgeFiles} sources={knowledgeSources} onSourcesChange={setKnowledgeSources} />
               ) : (
                 <BotConfigPanel mode={botConfigTab} botConfig={botConfig} onSave={async (data) => {
                   setPending(true);
@@ -239,7 +289,13 @@ export default function Home() {
               </div>
 
               {whatsappTab === 'status' ? (
-                <WhatsAppStatusPanel status={whatsappStatus} />
+                <WhatsAppStatusPanel
+                  status={whatsappStatus}
+                  loading={pending}
+                  onRefresh={refreshWhatsappStatus}
+                  onStartWeb={handleStartWhatsappWeb}
+                  onDisconnectWeb={handleDisconnectWhatsappWeb}
+                />
               ) : (
                 <section className="grid min-w-0 gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px] xl:gap-6">
                   <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-panel sm:rounded-3xl sm:p-4">
