@@ -3,22 +3,57 @@
 import { cookies } from 'next/headers';
 import type {
   BotConfig,
+  AutomationRule,
+  AutomationRuleInput,
+  CompanyIntakeInput,
   Conversation,
   DashboardSummary,
+  IntegrationConnection,
+  IntegrationInput,
   KnowledgeFile,
   KnowledgeFileUpload,
   KnowledgeItem,
+  KnowledgeStatus,
   KnowledgeSource,
   KnowledgeSourceInput,
   Message,
+  ProductItem,
+  ProductImportInput,
+  ProductImportPreview,
+  ProductItemInput,
   Settings,
+  SimulationAttachment,
   SimulationLog,
+  WhatsAppDisconnectEvent,
   WhatsAppStatus,
 } from './types';
 
 const DEFAULT_BACKEND_API_URL = 'http://localhost:3000/api';
 const AUTH_COOKIE = 'chatbot_admin_token';
 const REFRESH_COOKIE = 'chatbot_refresh_token';
+const DEFAULT_ACCESS_MAX_AGE = 60 * 60 * 24 * 30;
+const DEFAULT_REFRESH_MAX_AGE = 60 * 60 * 24 * 365;
+
+function ttlToSeconds(ttl?: string, fallback = DEFAULT_ACCESS_MAX_AGE) {
+  const match = /^(\d+)([smhd])$/.exec(ttl || '');
+
+  if (!match) return fallback;
+
+  const value = Number(match[1]);
+  const unit = match[2];
+  const multiplier = unit === 's' ? 1 : unit === 'm' ? 60 : unit === 'h' ? 60 * 60 : 60 * 60 * 24;
+  return value * multiplier;
+}
+
+function sessionCookieOptions(maxAge: number) {
+  return {
+    httpOnly: true,
+    sameSite: 'strict' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge,
+  };
+}
 
 function getBackendApiUrl() {
   if (!process.env.BACKEND_API_URL && process.env.NODE_ENV === 'production') {
@@ -58,7 +93,16 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    throw new Error(response.status === 401 ? 'Sessão expirada.' : 'Não foi possível concluir a operação.');
+    let errorMessage = '';
+
+    try {
+      const payload = await response.json() as { error?: string; message?: string };
+      errorMessage = payload.error || payload.message || '';
+    } catch {
+      errorMessage = '';
+    }
+
+    throw new Error(response.status === 401 ? 'Sessão expirada.' : errorMessage || 'Não foi possível concluir a operação.');
   }
 
   return response.json() as Promise<T>;
@@ -88,22 +132,12 @@ async function refreshSession() {
   const payload = (await response.json()) as {
     token: string;
     refreshToken: string;
+    accessTokenExpiresIn?: string;
+    refreshTokenExpiresIn?: string;
   };
 
-  cookieStore.set(AUTH_COOKIE, payload.token, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 15,
-  });
-  cookieStore.set(REFRESH_COOKIE, payload.refreshToken, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 7,
-  });
+  cookieStore.set(AUTH_COOKIE, payload.token, sessionCookieOptions(ttlToSeconds(payload.accessTokenExpiresIn, DEFAULT_ACCESS_MAX_AGE)));
+  cookieStore.set(REFRESH_COOKIE, payload.refreshToken, sessionCookieOptions(ttlToSeconds(payload.refreshTokenExpiresIn, DEFAULT_REFRESH_MAX_AGE)));
 
   return payload.token;
 }
@@ -125,24 +159,14 @@ export async function login(username: string, password: string) {
   const payload = (await response.json()) as {
     token: string;
     refreshToken: string;
+    accessTokenExpiresIn?: string;
+    refreshTokenExpiresIn?: string;
     user: { email: string; role: string };
   };
 
   const cookieStore = await cookies();
-  cookieStore.set(AUTH_COOKIE, payload.token, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 15,
-  });
-  cookieStore.set(REFRESH_COOKIE, payload.refreshToken, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 7,
-  });
+  cookieStore.set(AUTH_COOKIE, payload.token, sessionCookieOptions(ttlToSeconds(payload.accessTokenExpiresIn, DEFAULT_ACCESS_MAX_AGE)));
+  cookieStore.set(REFRESH_COOKIE, payload.refreshToken, sessionCookieOptions(ttlToSeconds(payload.refreshTokenExpiresIn, DEFAULT_REFRESH_MAX_AGE)));
 
   return { success: true, user: payload.user };
 }
@@ -187,12 +211,18 @@ export async function setupPassword(token: string, password: string) {
 export async function getAuthState() {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE)?.value;
+  const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;
 
-  if (!token) {
+  if (!token && !refreshToken) {
     return { authenticated: false };
   }
 
   try {
+    if (!token && refreshToken) {
+      const refreshed = await refreshSession();
+      return { authenticated: Boolean(refreshed) };
+    }
+
     await apiRequest('/auth/me');
     return { authenticated: true };
   } catch {
@@ -204,6 +234,13 @@ export async function getAuthState() {
 
 export async function getDashboard(): Promise<DashboardSummary> {
   return apiRequest('/dashboard');
+}
+
+export async function analyzeCompanyIntake(data: CompanyIntakeInput): Promise<{ summary: string }> {
+  return apiRequest('/dashboard/company-intake/analyze', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getConversations(): Promise<Conversation[]> {
@@ -250,10 +287,10 @@ export async function updateBotConfig(data: BotConfig): Promise<BotConfig> {
   });
 }
 
-export async function generateBotTestResponse(data: BotConfig, userMessage: string, conversationContext?: string, simulationId?: string) {
+export async function generateBotTestResponse(data: BotConfig, userMessage: string, conversationContext?: string, simulationId?: string, attachment?: SimulationAttachment) {
   const payload = await apiRequest<{ response: string; simulationId: string; log: SimulationLog }>('/bot-config/test', {
     method: 'POST',
-    body: JSON.stringify({ botConfig: data, message: userMessage, conversationContext, simulationId }),
+    body: JSON.stringify({ botConfig: data, message: userMessage, conversationContext, simulationId, attachment }),
   });
 
   return payload;
@@ -305,7 +342,7 @@ export async function createKnowledgeFile(file: KnowledgeFileUpload) {
   });
 }
 
-export async function updateKnowledgeFile(id: string, updates: Partial<Pick<KnowledgeFile, 'title' | 'description' | 'extracted_text' | 'active'>>) {
+export async function updateKnowledgeFile(id: string, updates: Partial<Pick<KnowledgeFile, 'title' | 'description' | 'content_description' | 'extracted_text' | 'active'>>) {
   return apiRequest<KnowledgeFile>(`/knowledge-files/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
@@ -326,6 +363,10 @@ export async function getKnowledgeSources(): Promise<KnowledgeSource[]> {
   return apiRequest('/knowledge-sources');
 }
 
+export async function getKnowledgeStatus(): Promise<KnowledgeStatus> {
+  return apiRequest('/knowledge-status');
+}
+
 export async function createKnowledgeSource(source: KnowledgeSourceInput) {
   return apiRequest<KnowledgeSource>('/knowledge-sources', {
     method: 'POST',
@@ -333,7 +374,7 @@ export async function createKnowledgeSource(source: KnowledgeSourceInput) {
   });
 }
 
-export async function updateKnowledgeSource(id: string, updates: Partial<Pick<KnowledgeSource, 'title' | 'source_type' | 'url' | 'description' | 'extracted_text' | 'active'>>) {
+export async function updateKnowledgeSource(id: string, updates: Partial<Pick<KnowledgeSource, 'title' | 'source_type' | 'url' | 'description' | 'content_description' | 'extracted_text' | 'active'>>) {
   return apiRequest<KnowledgeSource>(`/knowledge-sources/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
@@ -348,6 +389,86 @@ export async function syncKnowledgeSource(id: string) {
 
 export async function deleteKnowledgeSource(id: string) {
   return apiRequest<{ success: true }>(`/knowledge-sources/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getProductItems(): Promise<ProductItem[]> {
+  return apiRequest('/product-items');
+}
+
+export async function createProductItem(item: ProductItemInput) {
+  return apiRequest<ProductItem>('/product-items', {
+    method: 'POST',
+    body: JSON.stringify(item),
+  });
+}
+
+export async function updateProductItem(id: string, updates: Partial<ProductItemInput>) {
+  return apiRequest<ProductItem>(`/product-items/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteProductItem(id: string) {
+  return apiRequest<{ success: true }>(`/product-items/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function importProductItems(input: ProductImportInput) {
+  return apiRequest<{ imported: number; items: ProductItem[] }>('/product-items/import', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function previewProductItemsImport(input: ProductImportInput) {
+  return apiRequest<ProductImportPreview>('/product-items/preview-import', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getIntegrationConnections(): Promise<IntegrationConnection[]> {
+  return apiRequest('/integrations');
+}
+
+export async function createIntegrationConnection(input: IntegrationInput) {
+  return apiRequest<IntegrationConnection>('/integrations', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateIntegrationConnection(id: string, updates: Partial<IntegrationInput>) {
+  return apiRequest<IntegrationConnection>(`/integrations/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function getAutomationRules(): Promise<AutomationRule[]> {
+  return apiRequest('/automation-rules');
+}
+
+export async function createAutomationRule(input: AutomationRuleInput) {
+  return apiRequest<AutomationRule>('/automation-rules', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateAutomationRule(id: string, updates: Partial<AutomationRuleInput>) {
+  return apiRequest<AutomationRule>(`/automation-rules/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteAutomationRule(id: string) {
+  return apiRequest<{ success: true }>(`/automation-rules/${id}`, {
     method: 'DELETE',
   });
 }
@@ -389,6 +510,10 @@ export async function testWhatsappWebMessage(to: string, message: string) {
     method: 'POST',
     body: JSON.stringify({ to, message }),
   });
+}
+
+export async function getWhatsappDisconnectEvents(): Promise<WhatsAppDisconnectEvent[]> {
+  return apiRequest('/whatsapp/disconnect-events');
 }
 
 export async function getSettings(): Promise<Settings> {

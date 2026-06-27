@@ -2,14 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  FileText,
   LayoutDashboard,
   MessageCircle,
+  Paperclip,
   RefreshCw,
   Settings as SettingsIcon,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
-import { disconnectWhatsappWeb, getBotConfig, getConversations, getDashboard, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getSettings, getWhatsappStatus, logout, replyToConversation, startWhatsappWeb, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
-import type { BotConfig, Conversation, KnowledgeFile, KnowledgeItem, KnowledgeSource, Settings, WhatsAppStatus } from '@/lib/types';
+import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, getAutomationRules, getBotConfig, getConversations, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, replyToConversation, startWhatsappWeb, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import type { AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import MetricCard from '@/components/MetricCard';
@@ -34,6 +37,66 @@ type SectionId = (typeof sections)[number]['id'];
 type BotConfigTab = 'simulation' | 'config' | 'knowledge';
 type WhatsappTab = 'status' | 'conversations';
 type ThemeMode = 'dark' | 'light';
+type CompanyIntakeDraftFile = {
+  id: string;
+  file: File;
+  content_description: string;
+};
+
+const companyIntakeFileTypes = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/csv',
+  'text/plain',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+const companyIntakeFileExtensions = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|csv|txt|png|jpe?g|webp|gif)$/i;
+const maxCompanyIntakeFileBytes = 5 * 1024 * 1024;
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function mimeTypeForFile(file: File) {
+  if (file.type) return file.type;
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  const byExtension: Record<string, string> = {
+    csv: 'text/csv',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    gif: 'image/gif',
+    jpeg: 'image/jpeg',
+    jpg: 'image/jpeg',
+    pdf: 'application/pdf',
+    png: 'image/png',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    txt: 'text/plain',
+    webp: 'image/webp',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+
+  return extension ? byExtension[extension] || 'application/octet-stream' : 'application/octet-stream';
+}
+
+function formatFileSize(size: number) {
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
@@ -47,20 +110,36 @@ export default function Home() {
   const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
   const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>([]);
   const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>([]);
+  const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null);
+  const [productItems, setProductItems] = useState<ProductItem[]>([]);
+  const [integrations, setIntegrations] = useState<IntegrationConnection[]>([]);
+  const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
+  const [disconnectEvents, setDisconnectEvents] = useState<WhatsAppDisconnectEvent[]>([]);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pending, setPending] = useState(false);
+  const [companyIntakeText, setCompanyIntakeText] = useState('');
+  const [companyIntakeFiles, setCompanyIntakeFiles] = useState<CompanyIntakeDraftFile[]>([]);
+  const [companyIntakeError, setCompanyIntakeError] = useState('');
+  const [companyIntakeSummary, setCompanyIntakeSummary] = useState('');
+  const [analyzingCompanyIntake, setAnalyzingCompanyIntake] = useState(false);
+  const [savingCompanyIntake, setSavingCompanyIntake] = useState(false);
 
   const loadPanel = async () => {
     try {
       setPending(true);
-      const [dashboardData, convos, config, knowledgeData, knowledgeFilesData, knowledgeSourcesData, whatsapp, settingsData] = await Promise.all([
+      const [dashboardData, convos, config, knowledgeData, knowledgeFilesData, knowledgeSourcesData, knowledgeStatusData, productItemsData, integrationData, rulesData, whatsappEvents, whatsapp, settingsData] = await Promise.all([
         getDashboard(),
         getConversations(),
         getBotConfig(),
         getKnowledge(),
         getKnowledgeFiles(),
         getKnowledgeSources(),
+        getKnowledgeStatus(),
+        getProductItems(),
+        getIntegrationConnections(),
+        getAutomationRules(),
+        getWhatsappDisconnectEvents(),
         getWhatsappStatus(),
         getSettings(),
       ]);
@@ -71,6 +150,11 @@ export default function Home() {
       setKnowledge(knowledgeData);
       setKnowledgeFiles(knowledgeFilesData);
       setKnowledgeSources(knowledgeSourcesData);
+      setKnowledgeStatus(knowledgeStatusData);
+      setProductItems(productItemsData);
+      setIntegrations(integrationData);
+      setAutomationRules(rulesData);
+      setDisconnectEvents(whatsappEvents);
       setWhatsappStatus(whatsapp);
       setSettings(settingsData);
     } catch (error) {
@@ -135,13 +219,124 @@ export default function Home() {
     toast('Dados atualizados.');
   };
 
+  const handleCompanyIntakeFileSelect = (selectedFiles: FileList | null) => {
+    setCompanyIntakeError('');
+    const nextFiles = Array.from(selectedFiles || []);
+
+    if (nextFiles.length === 0) return;
+
+    const invalidType = nextFiles.find((file) => {
+      const mimeType = mimeTypeForFile(file);
+      return !companyIntakeFileTypes.has(mimeType) && !companyIntakeFileExtensions.test(file.name);
+    });
+
+    if (invalidType) {
+      setCompanyIntakeError('Envie imagem, PDF, Word, Excel, PowerPoint, CSV ou TXT.');
+      return;
+    }
+
+    const oversizedFile = nextFiles.find((file) => file.size > maxCompanyIntakeFileBytes);
+
+    if (oversizedFile) {
+      setCompanyIntakeError('Cada arquivo pode ter no máximo 5MB.');
+      return;
+    }
+
+    setCompanyIntakeFiles((current) => [
+      ...current,
+      ...nextFiles.map((file) => ({
+        id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        file,
+        content_description: '',
+      })),
+    ].slice(0, 10));
+  };
+
+  const handleAnalyzeCompanyIntake = async () => {
+    if ((!companyIntakeText.trim() && companyIntakeFiles.length === 0) || analyzingCompanyIntake) return;
+    setCompanyIntakeError('');
+    setAnalyzingCompanyIntake(true);
+
+    try {
+      const files: CompanyIntakeFile[] = await Promise.all(companyIntakeFiles.map(async (item) => ({
+        original_filename: item.file.name,
+        mime_type: mimeTypeForFile(item.file),
+        size_bytes: item.file.size,
+        data_url: await readFileAsDataUrl(item.file),
+        content_description: item.content_description.trim(),
+      })));
+      const result = await analyzeCompanyIntake({
+        company_text: companyIntakeText.trim(),
+        files,
+      });
+      setCompanyIntakeSummary(result.summary);
+    } catch (error) {
+      setCompanyIntakeError(error instanceof Error ? error.message : 'Não foi possível analisar as informações da empresa.');
+    } finally {
+      setAnalyzingCompanyIntake(false);
+    }
+  };
+
+  const handleSaveCompanyIntake = async () => {
+    if ((!companyIntakeSummary.trim() && companyIntakeFiles.length === 0) || savingCompanyIntake) return;
+    setCompanyIntakeError('');
+    setSavingCompanyIntake(true);
+
+    try {
+      if (companyIntakeSummary.trim()) {
+        const createdKnowledge = await createKnowledge({
+          title: 'Leitura inicial da empresa',
+          category: 'Geral',
+          content: [
+            companyIntakeSummary.trim(),
+            companyIntakeText.trim() ? `\nTexto original informado pela empresa:\n${companyIntakeText.trim()}` : '',
+          ].filter(Boolean).join('\n'),
+          active: true,
+        });
+        setKnowledge((current) => [createdKnowledge, ...current]);
+      }
+
+      const createdFiles = await Promise.all(companyIntakeFiles.map(async (item) => createKnowledgeFile({
+        title: item.file.name.replace(/\.[^.]+$/, ''),
+        description: 'Arquivo enviado no onboarding da empresa.',
+        content_description: item.content_description.trim(),
+        extracted_text: '',
+        original_filename: item.file.name,
+        mime_type: mimeTypeForFile(item.file),
+        size_bytes: item.file.size,
+        data_url: await readFileAsDataUrl(item.file),
+        active: true,
+      })));
+
+      if (createdFiles.length > 0) {
+        setKnowledgeFiles((current) => [...createdFiles.reverse(), ...current]);
+      }
+
+      setCompanyIntakeText('');
+      setCompanyIntakeFiles([]);
+      setCompanyIntakeSummary('');
+      toast('Onboarding salvo na base do bot.');
+    } catch (error) {
+      setCompanyIntakeError(error instanceof Error ? error.message : 'Não foi possível salvar o onboarding na base do bot.');
+    } finally {
+      setSavingCompanyIntake(false);
+    }
+  };
+
   const handleToggleTheme = () => {
     setTheme((current) => current === 'dark' ? 'light' : 'dark');
   };
 
   const refreshWhatsappStatus = async () => {
-    const status = await getWhatsappStatus();
-    setWhatsappStatus(status);
+    try {
+      const [status, events] = await Promise.all([getWhatsappStatus(), getWhatsappDisconnectEvents()]);
+      setWhatsappStatus(status);
+      setDisconnectEvents(events);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível atualizar o status do WhatsApp.';
+      toast(message);
+      throw error;
+    }
   };
 
   const handleStartWhatsappWeb = async () => {
@@ -179,6 +374,9 @@ export default function Home() {
     setKnowledge([]);
     setKnowledgeFiles([]);
     setKnowledgeSources([]);
+    setKnowledgeStatus(null);
+    setProductItems([]);
+    setIntegrations([]);
     setWhatsappStatus(null);
     setSettings(null);
     window.location.href = '/login';
@@ -230,6 +428,108 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Leitura inicial</p>
+                  <h2 className="text-xl font-semibold text-white">Conte tudo sobre sua empresa</h2>
+                  <p className="max-w-3xl text-sm leading-6 text-slate-400">Escreva como se estivesse explicando para uma pessoa. Se quiser, envie arquivos e diga rapidamente o que cada um representa. Por enquanto isso só gera uma leitura no painel.</p>
+                </div>
+
+                <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+                  <div className="space-y-4">
+                    <label className="space-y-2 text-sm font-medium text-slate-300">
+                      O que sua empresa faz?
+                      <textarea
+                        value={companyIntakeText}
+                        onChange={(event) => setCompanyIntakeText(event.target.value)}
+                        rows={7}
+                        placeholder="Ex: Vendemos capinhas personalizadas, películas e acessórios para celular. Atendemos pelo WhatsApp, fazemos entrega em São Paulo e também retiradas na loja..."
+                        className="w-full resize-none rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500"
+                      />
+                    </label>
+
+                    <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white sm:w-auto">
+                      <Paperclip size={16} />
+                      Adicionar arquivos
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,text/csv,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                        onChange={(event) => handleCompanyIntakeFileSelect(event.target.files)}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {companyIntakeFiles.length > 0 && (
+                      <div className="grid gap-3">
+                        {companyIntakeFiles.map((item) => (
+                          <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
+                            <div className="flex items-start gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-slate-400">
+                                <FileText size={18} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-white">{item.file.name}</p>
+                                <p className="mt-1 text-xs text-slate-500">{formatFileSize(item.file.size)}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setCompanyIntakeFiles((current) => current.filter((file) => file.id !== item.id))}
+                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-800 hover:text-rose-300"
+                                aria-label="Remover arquivo"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                            <label className="mt-3 block space-y-2 text-sm text-slate-300">
+                              O que esse arquivo representa?
+                              <input
+                                value={item.content_description}
+                                onChange={(event) => setCompanyIntakeFiles((current) => current.map((file) => file.id === item.id ? { ...file, content_description: event.target.value } : file))}
+                                placeholder="Ex: Essa planilha tem produtos, preços e estoque."
+                                className="w-full rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500"
+                              />
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {companyIntakeError && <p className="text-sm text-rose-300">{companyIntakeError}</p>}
+
+                    <button
+                      type="button"
+                      onClick={handleAnalyzeCompanyIntake}
+                      disabled={(!companyIntakeText.trim() && companyIntakeFiles.length === 0) || analyzingCompanyIntake}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto"
+                    >
+                      <Sparkles size={16} />
+                      {analyzingCompanyIntake ? 'Analisando...' : 'Gerar leitura da IA'}
+                    </button>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+                    <p className="text-sm font-semibold text-white">O que a IA entendeu</p>
+                    {companyIntakeSummary ? (
+                      <>
+                        <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-300">{companyIntakeSummary}</p>
+                        <button
+                          type="button"
+                          onClick={handleSaveCompanyIntake}
+                          disabled={savingCompanyIntake}
+                          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto"
+                        >
+                          <Sparkles size={16} />
+                          {savingCompanyIntake ? 'Salvando...' : 'Salvar na base do bot'}
+                        </button>
+                      </>
+                    ) : (
+                      <p className="mt-4 text-sm leading-6 text-slate-500">Depois de preencher e gerar a leitura, a IA vai devolver a primeira camada: nome da empresa, segmento, o que faz, horário, produtos/serviços, documentos enviados e tom da IA.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </section>
           )}
 
@@ -240,23 +540,43 @@ export default function Home() {
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Configurar Bot</p>
                   <h1 className="mt-1 text-xl font-semibold text-white">Bot e arquivos</h1>
                 </div>
-                <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-1 sm:w-auto">
-                  <button type="button" onClick={() => setBotConfigTab('simulation')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${botConfigTab === 'simulation' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                <div className="grid grid-cols-3 gap-1 rounded-2xl border border-slate-800 bg-slate-950/90 p-1 sm:w-auto">
+                  <button type="button" onClick={() => setBotConfigTab('simulation')} className={`min-h-10 rounded-xl px-3 py-2 text-sm font-semibold transition ${botConfigTab === 'simulation' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-900/80 hover:text-white'}`}>
                     Simulação
                   </button>
-                  <button type="button" onClick={() => setBotConfigTab('config')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${botConfigTab === 'config' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  <button type="button" onClick={() => setBotConfigTab('config')} className={`min-h-10 rounded-xl px-3 py-2 text-sm font-semibold transition ${botConfigTab === 'config' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-900/80 hover:text-white'}`}>
                     Configurações
                   </button>
-                  <button type="button" onClick={() => setBotConfigTab('knowledge')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${botConfigTab === 'knowledge' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  <button type="button" onClick={() => setBotConfigTab('knowledge')} className={`min-h-10 rounded-xl px-3 py-2 text-sm font-semibold transition ${botConfigTab === 'knowledge' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-900/80 hover:text-white'}`}>
                     Arquivos
                   </button>
                 </div>
               </div>
 
               {botConfigTab === 'knowledge' ? (
-                <KnowledgeEditor knowledge={knowledge} onChange={setKnowledge} files={knowledgeFiles} onFilesChange={setKnowledgeFiles} sources={knowledgeSources} onSourcesChange={setKnowledgeSources} />
+                <KnowledgeEditor
+                  knowledge={knowledge}
+                  onChange={setKnowledge}
+                  files={knowledgeFiles}
+                  onFilesChange={setKnowledgeFiles}
+                  sources={knowledgeSources}
+                  onSourcesChange={setKnowledgeSources}
+                  status={knowledgeStatus}
+                  products={productItems}
+                  onProductsChange={setProductItems}
+                  integrations={integrations}
+                  onIntegrationsChange={setIntegrations}
+                />
               ) : (
-                <BotConfigPanel mode={botConfigTab} botConfig={botConfig} onSave={async (data) => {
+                <BotConfigPanel
+                  mode={botConfigTab}
+                  botConfig={botConfig}
+                  automationRules={automationRules}
+                  onAutomationRulesChange={setAutomationRules}
+                  onCreateAutomationRule={createAutomationRule}
+                  onUpdateAutomationRule={updateAutomationRule}
+                  onDeleteAutomationRule={deleteAutomationRule}
+                  onSave={async (data) => {
                   setPending(true);
                   const updated = await updateBotConfig(data);
                   setBotConfig(updated);
@@ -278,11 +598,11 @@ export default function Home() {
                   <p className="text-xs uppercase tracking-[0.2em] text-emerald-400 sm:text-sm sm:tracking-[0.24em]">WhatsApp</p>
                   <h1 className="mt-1 text-xl font-semibold text-white">Integração e conversas</h1>
                 </div>
-                <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-1 sm:w-auto">
-                  <button type="button" onClick={() => setWhatsappTab('status')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${whatsappTab === 'status' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                <div className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-800 bg-slate-950/90 p-1 sm:w-auto">
+                  <button type="button" onClick={() => setWhatsappTab('status')} className={`min-h-10 rounded-xl px-3 py-2 text-sm font-semibold transition ${whatsappTab === 'status' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-900/80 hover:text-white'}`}>
                     Integração
                   </button>
-                  <button type="button" onClick={() => setWhatsappTab('conversations')} className={`rounded-lg px-3 py-2 text-sm font-medium transition ${whatsappTab === 'conversations' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  <button type="button" onClick={() => setWhatsappTab('conversations')} className={`min-h-10 rounded-xl px-3 py-2 text-sm font-semibold transition ${whatsappTab === 'conversations' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-900/80 hover:text-white'}`}>
                     Conversas
                   </button>
                 </div>
@@ -291,6 +611,7 @@ export default function Home() {
               {whatsappTab === 'status' ? (
                 <WhatsAppStatusPanel
                   status={whatsappStatus}
+                  disconnectEvents={disconnectEvents}
                   loading={pending}
                   onRefresh={refreshWhatsappStatus}
                   onStartWeb={handleStartWhatsappWeb}

@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { Copy, RefreshCw, ShieldCheck } from 'lucide-react';
-import type { WhatsAppStatus } from '@/lib/types';
+import type { WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
 import { testWhatsappWebMessage } from '@/lib/api';
 import { toast } from '@/components/Toast';
 
 type WhatsAppStatusPanelProps = {
   status: WhatsAppStatus;
+  disconnectEvents?: WhatsAppDisconnectEvent[];
   loading?: boolean;
   onRefresh: () => Promise<void>;
   onStartWeb: () => Promise<void>;
@@ -21,12 +22,26 @@ const webStatusLabel = {
   connected: 'Conectado',
 } as const;
 
-export default function WhatsAppStatusPanel({ status, loading = false, onRefresh, onStartWeb, onDisconnectWeb }: WhatsAppStatusPanelProps) {
+export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loading = false, onRefresh, onStartWeb, onDisconnectWeb }: WhatsAppStatusPanelProps) {
   const webConnected = status.web.status === 'connected';
   const webWaitingQr = status.web.status === 'qr_pending' && status.web.qrCode;
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('Teste de conexão via WhatsApp Web.');
   const [sendingTest, setSendingTest] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async (message: string) => {
+    if (refreshing || loading) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+      toast(message);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível atualizar o status.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleSendTest = async () => {
     if (!testPhone.trim() || !testMessage.trim() || sendingTest) return;
@@ -57,7 +72,7 @@ export default function WhatsAppStatusPanel({ status, loading = false, onRefresh
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:rounded-3xl sm:p-5">
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-slate-500">API oficial Meta</p>
@@ -75,14 +90,14 @@ export default function WhatsAppStatusPanel({ status, loading = false, onRefresh
                 { label: 'Assinatura Meta', value: status.metaSubscription },
               ].map((item) => (
                 <div key={item.label} className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">{item.label}</p>
-                  <p className="mt-3 break-words text-sm font-semibold text-white">{item.value}</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
+                  <p className="mt-3 break-words text-sm font-semibold text-white">{item.value || 'Não configurado'}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:rounded-3xl sm:p-5">
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-slate-500">WhatsApp Web</p>
@@ -92,8 +107,10 @@ export default function WhatsAppStatusPanel({ status, loading = false, onRefresh
                     ? `Número conectado: ${status.web.phoneNumber || 'WhatsApp Web'}`
                     : 'Escaneie o QR Code no celular do cliente para ativar esse canal.'}
                 </p>
-                <p className="mt-2 text-xs leading-5 text-amber-200">{status.web.warning}</p>
-                <p className="mt-2 text-xs leading-5 text-slate-500">Intervalo mínimo entre envios: {Math.round(status.web.sendDelayMs / 100) / 10}s.</p>
+                {status.web.warning && (
+                  <p className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium leading-5 text-amber-200">{status.web.warning}</p>
+                )}
+                <p className="mt-2 text-xs leading-5 text-slate-500">Atraso entre envios: {Math.round(status.web.sendDelayMs / 100) / 10}s a {Math.round((status.web.maxSendDelayMs || status.web.sendDelayMs) / 100) / 10}s, com indicador de digitando.</p>
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${webConnected ? 'bg-emerald-500/10 text-emerald-200' : 'bg-slate-800 text-slate-300'}`}>
                 {webConnected ? 'Ativo' : 'Inativo'}
@@ -112,15 +129,15 @@ export default function WhatsAppStatusPanel({ status, loading = false, onRefresh
             )}
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <button type="button" onClick={onStartWeb} disabled={loading || webConnected} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700">
+              <button type="button" onClick={onStartWeb} disabled={loading || webConnected} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400">
                 <RefreshCw size={16} /> {webWaitingQr ? 'Gerar novo QR' : 'Conectar via QR Code'}
               </button>
-              <button type="button" onClick={onDisconnectWeb} disabled={loading || status.web.status === 'disconnected'} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:text-slate-500">
+              <button type="button" onClick={onDisconnectWeb} disabled={loading || status.web.status === 'disconnected'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:text-slate-500">
                 Desconectar
               </button>
             </div>
 
-            <div className="mt-5 rounded-3xl border border-slate-800 bg-slate-900/70 p-4">
+            <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
               <p className="text-sm font-semibold text-white">Teste de envio pelo WhatsApp Web</p>
               <div className="mt-4 grid gap-3">
                 <label className="space-y-2 text-sm text-slate-300">
@@ -131,9 +148,23 @@ export default function WhatsAppStatusPanel({ status, loading = false, onRefresh
                   Mensagem
                   <textarea value={testMessage} onChange={(event) => setTestMessage(event.target.value)} rows={3} className="w-full resize-none rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
                 </label>
-                <button type="button" onClick={handleSendTest} disabled={!webConnected || !testPhone.trim() || !testMessage.trim() || sendingTest} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto">
+                <button type="button" onClick={handleSendTest} disabled={!webConnected || !testPhone.trim() || !testMessage.trim() || sendingTest} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto">
                   Enviar teste
                 </button>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+              <p className="text-sm font-semibold text-white">Histórico de desconexões</p>
+              <div className="mt-3 grid gap-2">
+                {disconnectEvents.length === 0 ? (
+                  <p className="text-sm text-slate-400">Nenhuma queda registrada ainda.</p>
+                ) : disconnectEvents.slice(0, 5).map((event) => (
+                  <div key={event.id} className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-sm text-slate-300">
+                    <p className="font-medium text-white">{new Date(event.occurred_at).toLocaleString('pt-BR')}</p>
+                    <p className="mt-1 text-xs text-slate-500">{event.reason || 'Sessão encerrada'}{event.status_code ? ` · código ${event.status_code}` : ''}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -143,10 +174,10 @@ export default function WhatsAppStatusPanel({ status, loading = false, onRefresh
           <button type="button" className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-800 px-4 py-3 text-sm text-white transition hover:bg-slate-700">
             <Copy size={16} /> Copiar URL do webhook
           </button>
-          <button type="button" onClick={onRefresh} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-slate-100 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:text-slate-500">
-            <RefreshCw size={16} /> Recarregar configuração
+          <button type="button" onClick={() => void handleRefresh('Configuração recarregada.')} disabled={loading || refreshing} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-slate-100 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:text-slate-500">
+            <RefreshCw size={16} /> {refreshing ? 'Atualizando...' : 'Recarregar configuração'}
           </button>
-          <button type="button" onClick={onRefresh} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-slate-100 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:text-slate-500">
+          <button type="button" onClick={() => void handleRefresh('Status verificado.')} disabled={loading || refreshing} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-slate-100 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:text-slate-500">
             Verificar status
           </button>
         </div>
