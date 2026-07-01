@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowRight,
+  Building2,
+  CheckCircle2,
   FileText,
   LayoutDashboard,
   MessageCircle,
@@ -37,6 +40,7 @@ type SectionId = (typeof sections)[number]['id'];
 type BotConfigTab = 'simulation' | 'config' | 'knowledge';
 type WhatsappTab = 'status' | 'conversations';
 type ThemeMode = 'dark' | 'light';
+type OnboardingMode = 'hidden' | 'welcome' | 'wizard' | 'finishing' | 'ready';
 type CompanyIntakeDraftFile = {
   id: string;
   file: File;
@@ -60,6 +64,19 @@ const companyIntakeFileTypes = new Set([
 ]);
 const companyIntakeFileExtensions = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|csv|txt|png|jpe?g|webp|gif)$/i;
 const maxCompanyIntakeFileBytes = 5 * 1024 * 1024;
+const onboardingStorageKey = 'bella-ai-onboarding-completed';
+const onboardingTotalSteps = 5;
+const toneOptions = ['Formal', 'Amigável', 'Vendas', 'Suporte', 'Jurídico', 'Médico', 'Financeiro'];
+const contextProcessingItems = [
+  'Identificando segmento',
+  'Produtos',
+  'Serviços',
+  'Horários',
+  'Diferenciais',
+  'Público',
+  'Linguagem',
+];
+const finishingItems = ['Configurando IA', 'Criando empresa', 'Gerando prompt', 'Tudo pronto'];
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -98,6 +115,44 @@ function formatFileSize(size: number) {
   return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function wordCount(text: string) {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function buildLiveUnderstanding(text: string, files: CompanyIntakeDraftFile[], draft: { company_name: string; segment: string }) {
+  const items: string[] = [];
+  const normalized = text.trim();
+
+  if (draft.segment.trim()) {
+    items.push(`Empresa de ${draft.segment.trim().toLowerCase()}.`);
+  }
+
+  const lines = normalized
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((line) => line.trim().replace(/[.!?]+$/, ''))
+    .filter((line) => line.length > 8);
+
+  for (const line of lines.slice(0, 4)) {
+    items.push(`${line}.`);
+  }
+
+  if (files.length > 0) {
+    items.push(`${files.length} arquivo${files.length > 1 ? 's' : ''} enviado${files.length > 1 ? 's' : ''} como base de conhecimento.`);
+  }
+
+  if (items.length === 0 && draft.company_name.trim()) {
+    items.push(`Empresa ${draft.company_name.trim()} em configuração.`);
+  }
+
+  return Array.from(new Set(items)).slice(0, 6);
+}
+
 export default function Home() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [botConfigTab, setBotConfigTab] = useState<BotConfigTab>('simulation');
@@ -124,6 +179,18 @@ export default function Home() {
   const [companyIntakeSummary, setCompanyIntakeSummary] = useState('');
   const [analyzingCompanyIntake, setAnalyzingCompanyIntake] = useState(false);
   const [savingCompanyIntake, setSavingCompanyIntake] = useState(false);
+  const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>('hidden');
+  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [finishingProgress, setFinishingProgress] = useState(0);
+  const [tonePromptOpen, setTonePromptOpen] = useState(false);
+  const [knowledgeReviewOpen, setKnowledgeReviewOpen] = useState(false);
+  const [onboardingDraft, setOnboardingDraft] = useState({
+    company_name: '',
+    segment: '',
+    assistant_name: 'Bella',
+    tone: '',
+    response_length: 'média' as BotConfig['response_length'],
+  });
 
   const loadPanel = async () => {
     try {
@@ -176,6 +243,22 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!dashboard || !botConfig) return;
+
+    setOnboardingDraft((current) => ({
+      company_name: current.company_name || botConfig.company_name || settings?.company_name || '',
+      segment: current.segment || botConfig.segment || '',
+      assistant_name: current.assistant_name || botConfig.assistant_name || 'Bella',
+      tone: current.tone || botConfig.tone || '',
+      response_length: current.response_length || botConfig.response_length || 'média',
+    }));
+
+    if (window.localStorage.getItem(onboardingStorageKey) === 'true') {
+      setOnboardingMode('hidden');
+    }
+  }, [dashboard, botConfig, settings]);
+
+  useEffect(() => {
     if (!whatsappStatus) return;
 
     const fastPolling = activeSection === 'whatsapp'
@@ -209,6 +292,8 @@ export default function Home() {
   );
   const companyName = botConfig?.company_name || settings?.company_name || selectedConversation?.company?.name || 'Painel de Atendimento';
   const whatsappConnected = Boolean(whatsappStatus?.connected || whatsappStatus?.web.status === 'connected');
+  const liveUnderstanding = buildLiveUnderstanding(companyIntakeText, companyIntakeFiles, onboardingDraft);
+  const onboardingKnowledgeWords = wordCount(companyIntakeSummary || companyIntakeText);
 
   const handleChangeSection = (section: string) => {
     setActiveSection(section as SectionId);
@@ -323,6 +408,80 @@ export default function Home() {
     }
   };
 
+  const updateOnboardingDraft = <Key extends keyof typeof onboardingDraft>(field: Key, value: (typeof onboardingDraft)[Key]) => {
+    setOnboardingDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const onboardingStepIsValid = () => {
+    if (onboardingStep === 1) {
+      return Boolean(onboardingDraft.company_name.trim() && onboardingDraft.segment.trim());
+    }
+
+    if (onboardingStep === 2) {
+      return Boolean(onboardingDraft.assistant_name.trim());
+    }
+
+    return true;
+  };
+
+  const handleNextOnboardingStep = () => {
+    if (!onboardingStepIsValid()) {
+      toast('Preencha os campos principais para continuar.');
+      return;
+    }
+
+    setOnboardingStep((current) => Math.min(onboardingTotalSteps, current + 1));
+  };
+
+  const handleFinishOnboarding = async () => {
+    if (!botConfig) return;
+
+    setPending(true);
+    setFinishingProgress(0);
+    setOnboardingMode('finishing');
+
+    try {
+      await wait(450);
+      setFinishingProgress(1);
+
+      const updated = await updateBotConfig({
+        ...botConfig,
+        assistant_name: onboardingDraft.assistant_name.trim() || botConfig.assistant_name,
+        company_name: onboardingDraft.company_name.trim() || botConfig.company_name,
+        segment: onboardingDraft.segment.trim() || botConfig.segment,
+        tone: onboardingDraft.tone.trim() || botConfig.tone,
+        response_length: onboardingDraft.response_length,
+        company_description: companyIntakeText.trim() || companyIntakeSummary.trim() || botConfig.company_description,
+      });
+
+      setBotConfig(updated);
+      setFinishingProgress(2);
+
+      if (companyIntakeSummary.trim() || companyIntakeFiles.length > 0) {
+        await handleSaveCompanyIntake();
+      }
+
+      await wait(650);
+      setFinishingProgress(3);
+      await wait(650);
+      window.localStorage.setItem(onboardingStorageKey, 'true');
+      setOnboardingMode('ready');
+      setOnboardingStep(1);
+    } catch (error) {
+      setOnboardingMode('wizard');
+      toast(error instanceof Error ? error.message : 'Não foi possível concluir os primeiros passos.');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleGoToWhatsAppSetup = () => {
+    window.localStorage.setItem(onboardingStorageKey, 'true');
+    setOnboardingMode('hidden');
+    setActiveSection('whatsapp');
+    setWhatsappTab('status');
+  };
+
   const handleToggleTheme = () => {
     setTheme((current) => current === 'dark' ? 'light' : 'dark');
   };
@@ -382,6 +541,448 @@ export default function Home() {
     window.location.href = '/login';
   };
 
+  const onboardingProgress = `${Math.round((onboardingStep / onboardingTotalSteps) * 100)}%`;
+
+  if (onboardingMode !== 'hidden' && dashboard && botConfig) {
+    return (
+      <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 lg:px-10">
+        {onboardingMode === 'finishing' ? (
+          <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-3xl items-center justify-center">
+            <div className="w-full rounded-2xl border border-slate-800 bg-slate-900/95 p-6 text-center shadow-2xl sm:rounded-3xl sm:p-10">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-950/40">
+                <Sparkles size={30} />
+              </div>
+              <h1 className="mt-6 text-2xl font-semibold text-white sm:text-3xl">Configurando IA...</h1>
+              <div className="mx-auto mt-8 max-w-md space-y-3 text-left">
+                {finishingItems.map((item, index) => (
+                  <div key={item} className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                    <CheckCircle2 size={18} className={index <= finishingProgress ? 'text-emerald-300' : 'text-slate-600'} />
+                    <span className={index <= finishingProgress ? 'text-sm font-semibold text-white' : 'text-sm font-semibold text-slate-500'}>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        ) : onboardingMode === 'ready' ? (
+          <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-3xl items-center justify-center">
+            <div className="w-full rounded-2xl border border-emerald-500/20 bg-slate-900/95 p-6 text-center shadow-2xl sm:rounded-3xl sm:p-10">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-950/40">
+                <CheckCircle2 size={32} />
+              </div>
+              <h1 className="mt-6 text-3xl font-semibold text-white">Sua IA está pronta.</h1>
+              <p className="mx-auto mt-4 max-w-lg text-base leading-7 text-slate-400">
+                Agora conecte seu WhatsApp para começar a atender clientes.
+              </p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <button
+                  type="button"
+                  onClick={handleGoToWhatsAppSetup}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                >
+                  Conectar WhatsApp
+                  <ArrowRight size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnboardingMode('hidden')}
+                  className="inline-flex min-h-12 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
+                >
+                  Ir para Dashboard
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : onboardingMode === 'welcome' ? (
+          <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl items-center justify-center">
+            <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/90 shadow-2xl sm:rounded-3xl">
+              <div className="grid min-h-[560px] lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <div className="flex flex-col justify-between border-b border-slate-800 bg-slate-950 p-6 sm:p-8 lg:border-b-0 lg:border-r">
+                  <div>
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-950/40">
+                      <Sparkles size={26} />
+                    </div>
+                    <p className="mt-8 text-xs uppercase tracking-[0.22em] text-emerald-300">Configuração inicial</p>
+                    <h1 className="mt-3 max-w-xl text-3xl font-semibold leading-tight text-white sm:text-4xl">
+                      Configure seu assistente de IA em menos de 2 minutos.👋
+                    </h1>
+                    <p className="mt-4 max-w-lg text-base leading-7 text-slate-400">
+                      Ele estará pronto para responder seus clientes no WhatsApp automaticamente.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOnboardingStep(1);
+                      setOnboardingMode('wizard');
+                    }}
+                    className="mt-10 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white transition hover:bg-emerald-500 sm:w-auto"
+                  >
+                    Começar
+                    <ArrowRight size={20} />
+                  </button>
+                </div>
+
+                <div className="flex flex-col justify-center gap-4 p-6 sm:p-8">
+                  {[
+                    ['01', 'Empresa', 'Nome, segmento e contexto básico.'],
+                    ['02', 'Assistente', 'Escolha como a IA vai se apresentar.'],
+                    ['03', 'Conhecimento', 'Ensine sua IA sobre a empresa.'],
+                    ['04', 'Atendimento', 'Defina estilo e tamanho das respostas.'],
+                    ['05', 'Pronto', 'Revise e entre no painel.'],
+                  ].map(([number, title, description]) => (
+                    <div key={number} className="flex gap-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-emerald-300">
+                        {number}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-white">{title}</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl items-center justify-center">
+            <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/95 shadow-2xl sm:rounded-3xl">
+              <div className="border-b border-slate-800 p-5 sm:p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.22em] text-emerald-300">Passo {onboardingStep} de {onboardingTotalSteps}</p>
+                    <h1 className="mt-2 text-2xl font-semibold text-white">
+                      {onboardingStep === 1 && 'Empresa'}
+                      {onboardingStep === 2 && 'Nome do assistente'}
+                      {onboardingStep === 3 && 'Ensine sua IA sobre sua empresa'}
+                      {onboardingStep === 4 && 'Estilo de atendimento'}
+                      {onboardingStep === 5 && 'Revisão final'}
+                    </h1>
+                    {onboardingStep === 2 && (
+                      <p className="mt-2 text-sm leading-6 text-slate-400">Esse será o nome que aparecerá para seus clientes.</p>
+                    )}
+                    {onboardingStep === 3 && (
+                      <p className="mt-2 text-sm leading-6 text-slate-400">Quanto mais contexto você fornecer, melhores serão as respostas.</p>
+                    )}
+                  </div>
+                  <div className="min-w-[180px]">
+                    <div className="h-3 overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: onboardingProgress }} />
+                    </div>
+                    <p className="mt-2 text-right text-xs text-slate-500">{onboardingProgress}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 sm:p-6">
+                {onboardingStep === 1 && (
+                  <div className="mx-auto max-w-2xl space-y-5">
+                    <label className="space-y-2 text-sm font-medium text-slate-300">
+                      Nome da empresa
+                      <input
+                        value={onboardingDraft.company_name}
+                        onChange={(event) => updateOnboardingDraft('company_name', event.target.value)}
+                        placeholder="Bella Pizzaria"
+                        className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                      />
+                    </label>
+                    <label className="space-y-2 text-sm font-medium text-slate-300">
+                      Segmento
+                      <input
+                        value={onboardingDraft.segment}
+                        onChange={(event) => updateOnboardingDraft('segment', event.target.value)}
+                        placeholder="Restaurante"
+                        className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {onboardingStep === 2 && (
+                  <div className="mx-auto max-w-2xl space-y-5">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {['Bella', 'Ana', 'Atendente'].map((name) => (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => updateOnboardingDraft('assistant_name', name)}
+                          className={`min-h-14 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${onboardingDraft.assistant_name === name ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-700 bg-slate-950/80 text-slate-300 hover:border-slate-500 hover:text-white'}`}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="space-y-2 text-sm font-medium text-slate-300">
+                      Ou digite outro nome
+                      <input
+                        value={onboardingDraft.assistant_name}
+                        onChange={(event) => updateOnboardingDraft('assistant_name', event.target.value)}
+                        placeholder="Ex: Sofia, Lucas, Recepção"
+                        className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {onboardingStep === 3 && (
+                  <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+                    <div className="space-y-4">
+                      <label className="space-y-2 text-sm font-medium text-slate-300">
+                        O que sua empresa faz?
+                        <textarea
+                          value={companyIntakeText}
+                          onChange={(event) => setCompanyIntakeText(event.target.value)}
+                          rows={8}
+                          placeholder={`Ex:\nVendemos capinhas personalizadas para celular.\nProduzimos sob encomenda.\nEntregamos em todo o Brasil.\nNosso prazo médio é de 3 dias.`}
+                          className="w-full resize-none rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm leading-6 text-white outline-none transition focus:border-emerald-400"
+                        />
+                      </label>
+
+                      <div className="flex flex-col gap-3">
+                        <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white">
+                          <Paperclip size={16} />
+                          Adicionar arquivos
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,text/csv,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            onChange={(event) => handleCompanyIntakeFileSelect(event.target.files)}
+                            className="hidden"
+                          />
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {['PDF', 'DOCX', 'TXT', 'XLSX', 'CSV'].map((format) => (
+                            <span key={format} className="rounded-lg border border-slate-800 bg-slate-950/80 px-2 py-1 text-xs font-semibold text-slate-400">{format}</span>
+                          ))}
+                          <span className="px-2 py-1 text-xs text-slate-500">Até 10 arquivos, 5MB cada.</span>
+                        </div>
+                      </div>
+
+                      {companyIntakeFiles.length > 0 && (
+                        <div className="grid gap-3">
+                          {companyIntakeFiles.map((item) => (
+                            <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
+                              <div className="flex items-start gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-slate-400">
+                                  <FileText size={18} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-white">{item.file.name}</p>
+                                  <p className="mt-1 text-xs text-slate-500">{formatFileSize(item.file.size)}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setCompanyIntakeFiles((current) => current.filter((file) => file.id !== item.id))}
+                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-800 hover:text-rose-300"
+                                  aria-label="Remover arquivo"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                              <label className="mt-3 block space-y-2 text-sm text-slate-300">
+                                O que esse arquivo representa?
+                                <input
+                                  value={item.content_description}
+                                  onChange={(event) => setCompanyIntakeFiles((current) => current.map((file) => file.id === item.id ? { ...file, content_description: event.target.value } : file))}
+                                  placeholder="Ex: Esse PDF tem o cardápio e preços."
+                                  className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                                />
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {companyIntakeError && <p className="text-sm text-rose-300">{companyIntakeError}</p>}
+
+                      <button
+                        type="button"
+                        onClick={handleAnalyzeCompanyIntake}
+                        disabled={(!companyIntakeText.trim() && companyIntakeFiles.length === 0) || analyzingCompanyIntake}
+                        className="inline-flex w-full min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto"
+                      >
+                        <Sparkles size={16} />
+                        {analyzingCompanyIntake ? 'Processando...' : 'Gerar contexto'}
+                      </button>
+                    </div>
+
+                    <aside className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Resultado</p>
+                      <h3 className="mt-2 text-lg font-semibold text-white">O que a IA entendeu</h3>
+                      {analyzingCompanyIntake ? (
+                        <div className="mt-4 space-y-3">
+                          <div className="text-2xl">🧠</div>
+                          <p className="text-sm font-semibold text-white">Lendo empresa...</p>
+                          {contextProcessingItems.map((item) => (
+                            <div key={item} className="flex items-center gap-2 text-sm text-slate-300">
+                              <CheckCircle2 size={15} className="text-emerald-300" />
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      ) : companyIntakeSummary ? (
+                        <p className="mt-4 max-h-[360px] overflow-y-auto whitespace-pre-line text-sm leading-6 text-slate-300">{companyIntakeSummary}</p>
+                      ) : liveUnderstanding.length > 0 ? (
+                        <div className="mt-4 space-y-3">
+                          {liveUnderstanding.map((item) => (
+                            <div key={item} className="flex gap-2 text-sm leading-6 text-slate-300">
+                              <CheckCircle2 size={15} className="mt-1 shrink-0 text-emerald-300" />
+                              <span>{item}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-4 text-sm leading-6 text-slate-500">
+                          Enquanto você digita, a IA organiza os principais pontos aqui.
+                        </p>
+                      )}
+                    </aside>
+                  </div>
+                )}
+
+                {onboardingStep === 4 && (
+                  <div className="mx-auto max-w-2xl space-y-5">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {toneOptions.map((tone) => (
+                        <button
+                          key={tone}
+                          type="button"
+                          onClick={() => updateOnboardingDraft('tone', tone)}
+                          className={`min-h-14 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${onboardingDraft.tone === tone ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-700 bg-slate-950/80 text-slate-300 hover:border-slate-500 hover:text-white'}`}
+                        >
+                          {tone}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTonePromptOpen((current) => !current)}
+                      className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
+                    >
+                      Editar prompt
+                    </button>
+                    {tonePromptOpen && (
+                      <label className="block space-y-2 text-sm font-medium text-slate-300">
+                        Prompt de tom personalizado
+                        <input
+                          value={onboardingDraft.tone}
+                          onChange={(event) => updateOnboardingDraft('tone', event.target.value)}
+                          placeholder="Ex: simpático, direto, profissional e acolhedor"
+                          className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                        />
+                      </label>
+                    )}
+                    <div>
+                      <p className="mb-3 text-sm font-semibold text-white">Tamanho da resposta</p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {(['curta', 'média', 'detalhada'] as BotConfig['response_length'][]).map((length) => (
+                        <button
+                          key={length}
+                          type="button"
+                          onClick={() => updateOnboardingDraft('response_length', length)}
+                          className={`min-h-14 rounded-2xl border px-4 py-3 text-sm font-semibold capitalize transition ${onboardingDraft.response_length === length ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-700 bg-slate-950/80 text-slate-300 hover:border-slate-500 hover:text-white'}`}
+                        >
+                          {length}
+                        </button>
+                      ))}
+                    </div>
+                    </div>
+                  </div>
+                )}
+
+                {onboardingStep === 5 && (
+                  <div className="mx-auto max-w-2xl space-y-4">
+                    {[
+                      ['Empresa', onboardingDraft.company_name || 'Não informado'],
+                      ['Segmento', onboardingDraft.segment || 'Não informado'],
+                      ['Assistente', onboardingDraft.assistant_name || 'Bella'],
+                      ['Tom', onboardingDraft.tone || 'Padrão da Bella'],
+                      ['Resposta', onboardingDraft.response_length],
+                      ['Conhecimento', `${onboardingKnowledgeWords} palavras · ${companyIntakeFiles.length} arquivo${companyIntakeFiles.length === 1 ? '' : 's'} enviado${companyIntakeFiles.length === 1 ? '' : 's'}`],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                        <span className="text-sm text-slate-500">{label}</span>
+                        <span className="text-right text-sm font-semibold text-white">{value}</span>
+                      </div>
+                    ))}
+
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-white">Conhecimento entendido pela IA</p>
+                          <p className="mt-1 text-sm leading-6 text-slate-500">
+                            Revise e ajuste qualquer informação que não ficou certa.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setKnowledgeReviewOpen((current) => !current)}
+                          className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
+                        >
+                          {knowledgeReviewOpen ? 'Fechar edição' : 'Editar informação'}
+                        </button>
+                      </div>
+
+                      {knowledgeReviewOpen ? (
+                        <textarea
+                          value={companyIntakeSummary || companyIntakeText}
+                          onChange={(event) => {
+                            if (companyIntakeSummary) {
+                              setCompanyIntakeSummary(event.target.value);
+                            } else {
+                              setCompanyIntakeText(event.target.value);
+                            }
+                          }}
+                          rows={7}
+                          placeholder="Ajuste aqui o contexto que será usado pela IA."
+                          className="mt-4 w-full resize-none rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm leading-6 text-white outline-none transition focus:border-emerald-400"
+                        />
+                      ) : (
+                        <p className="mt-4 max-h-48 overflow-y-auto whitespace-pre-line rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-sm leading-6 text-slate-300">
+                          {companyIntakeSummary || companyIntakeText || 'Nenhum contexto informado ainda.'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-800 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <button
+                  type="button"
+                  onClick={() => onboardingStep === 1 ? setOnboardingMode('welcome') : setOnboardingStep((current) => Math.max(1, current - 1))}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
+                >
+                  Voltar
+                </button>
+                {onboardingStep < onboardingTotalSteps ? (
+                  <button
+                    type="button"
+                    onClick={handleNextOnboardingStep}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                  >
+                    Continuar
+                    <ArrowRight size={16} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleFinishOnboarding}
+                    disabled={pending}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                  >
+                    <CheckCircle2 size={16} />
+                    {pending ? 'Finalizando...' : 'Finalizar configuração'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+    );
+  };
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-slate-950 pb-24 text-slate-100 lg:pb-0">
       <div className="fixed inset-y-0 left-0 hidden w-80 border-r border-slate-800 bg-slate-950/98 backdrop-blur-xl lg:block xl:w-72">
@@ -429,105 +1030,31 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm">Leitura inicial</p>
-                  <h2 className="text-xl font-semibold text-white">Conte tudo sobre sua empresa</h2>
-                  <p className="max-w-3xl text-sm leading-6 text-slate-400">Escreva como se estivesse explicando para uma pessoa. Se quiser, envie arquivos e diga rapidamente o que cada um representa. Por enquanto isso só gera uma leitura no painel.</p>
-                </div>
-
-                <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-                  <div className="space-y-4">
-                    <label className="space-y-2 text-sm font-medium text-slate-300">
-                      O que sua empresa faz?
-                      <textarea
-                        value={companyIntakeText}
-                        onChange={(event) => setCompanyIntakeText(event.target.value)}
-                        rows={7}
-                        placeholder="Ex: Vendemos capinhas personalizadas, películas e acessórios para celular. Atendemos pelo WhatsApp, fazemos entrega em São Paulo e também retiradas na loja..."
-                        className="w-full resize-none rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500"
-                      />
-                    </label>
-
-                    <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white sm:w-auto">
-                      <Paperclip size={16} />
-                      Adicionar arquivos
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,text/csv,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                        onChange={(event) => handleCompanyIntakeFileSelect(event.target.files)}
-                        className="hidden"
-                      />
-                    </label>
-
-                    {companyIntakeFiles.length > 0 && (
-                      <div className="grid gap-3">
-                        {companyIntakeFiles.map((item) => (
-                          <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
-                            <div className="flex items-start gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-slate-400">
-                                <FileText size={18} />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-semibold text-white">{item.file.name}</p>
-                                <p className="mt-1 text-xs text-slate-500">{formatFileSize(item.file.size)}</p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setCompanyIntakeFiles((current) => current.filter((file) => file.id !== item.id))}
-                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-800 hover:text-rose-300"
-                                aria-label="Remover arquivo"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                            <label className="mt-3 block space-y-2 text-sm text-slate-300">
-                              O que esse arquivo representa?
-                              <input
-                                value={item.content_description}
-                                onChange={(event) => setCompanyIntakeFiles((current) => current.map((file) => file.id === item.id ? { ...file, content_description: event.target.value } : file))}
-                                placeholder="Ex: Essa planilha tem produtos, preços e estoque."
-                                className="w-full rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500"
-                              />
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {companyIntakeError && <p className="text-sm text-rose-300">{companyIntakeError}</p>}
-
-                    <button
-                      type="button"
-                      onClick={handleAnalyzeCompanyIntake}
-                      disabled={(!companyIntakeText.trim() && companyIntakeFiles.length === 0) || analyzingCompanyIntake}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto"
-                    >
-                      <Sparkles size={16} />
-                      {analyzingCompanyIntake ? 'Analisando...' : 'Gerar leitura da IA'}
-                    </button>
+              <div className="overflow-hidden rounded-2xl border border-emerald-500/20 bg-slate-900/80 shadow-panel sm:rounded-3xl">
+                <div className="grid gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <div className="flex min-w-0 gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600/10 text-emerald-300">
+                      <Building2 size={22} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.2em] text-emerald-300 sm:text-sm">Primeiros passos</p>
+                      <h2 className="mt-1 text-xl font-semibold text-white">Conte tudo sobre sua empresa</h2>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+                        Abra a janelinha de onboarding para gerar a primeira leitura da IA e salvar esse contexto na base do bot.
+                      </p>
+                    </div>
                   </div>
-
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
-                    <p className="text-sm font-semibold text-white">O que a IA entendeu</p>
-                    {companyIntakeSummary ? (
-                      <>
-                        <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-300">{companyIntakeSummary}</p>
-                        <button
-                          type="button"
-                          onClick={handleSaveCompanyIntake}
-                          disabled={savingCompanyIntake}
-                          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto"
-                        >
-                          <Sparkles size={16} />
-                          {savingCompanyIntake ? 'Salvando...' : 'Salvar na base do bot'}
-                        </button>
-                      </>
-                    ) : (
-                      <p className="mt-4 text-sm leading-6 text-slate-500">Depois de preencher e gerar a leitura, a IA vai devolver a primeira camada: nome da empresa, segmento, o que faz, horário, produtos/serviços, documentos enviados e tom da IA.</p>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOnboardingStep(1);
+                      setOnboardingMode('wizard');
+                    }}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                  >
+                    Abrir primeiros passos
+                    <ArrowRight size={16} />
+                  </button>
                 </div>
               </div>
             </section>
