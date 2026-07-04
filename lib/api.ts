@@ -143,14 +143,20 @@ async function refreshSession() {
 }
 
 export async function login(username: string, password: string) {
-  const response = await fetch(`${getBackendApiUrl()}/auth/login`, {
-    method: 'POST',
-    cache: 'no-store',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email: username, password }),
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${getBackendApiUrl()}/auth/login`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: username, password }),
+    });
+  } catch {
+    return { success: false, error: 'Não foi possível conectar ao backend. Verifique se a API está rodando na porta 3000.' };
+  }
 
   if (!response.ok) {
     return { success: false, error: 'Usuário ou senha inválidos.' };

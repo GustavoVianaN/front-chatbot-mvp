@@ -37,6 +37,7 @@ export type BotConfig = {
   use_markdown: boolean;
   use_emojis: boolean;
   analyze_images: boolean;
+  allow_audio_messages: boolean;
   farewell_message: string;
   max_wait_seconds: number;
   working_days: string;

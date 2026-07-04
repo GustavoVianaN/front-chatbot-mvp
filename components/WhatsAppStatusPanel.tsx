@@ -25,10 +25,12 @@ const webStatusLabel = {
 export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loading = false, onRefresh, onStartWeb, onDisconnectWeb }: WhatsAppStatusPanelProps) {
   const webConnected = status.web.status === 'connected';
   const webWaitingQr = status.web.status === 'qr_pending' && status.web.qrCode;
+  const canStartWeb = status.web.status === 'disconnected';
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('Teste de conexão via WhatsApp Web.');
   const [sendingTest, setSendingTest] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [startingWeb, setStartingWeb] = useState(false);
 
   const handleRefresh = async (message: string) => {
     if (refreshing || loading) return;
@@ -55,6 +57,17 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
       toast(error instanceof Error ? error.message : 'Não foi possível enviar a mensagem de teste.');
     } finally {
       setSendingTest(false);
+    }
+  };
+
+  const handleStartWeb = async () => {
+    if (startingWeb || loading) return;
+
+    setStartingWeb(true);
+    try {
+      await onStartWeb();
+    } finally {
+      setStartingWeb(false);
     }
   };
 
@@ -129,9 +142,16 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
             )}
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <button type="button" onClick={onStartWeb} disabled={loading || webConnected} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400">
-                <RefreshCw size={16} /> {webWaitingQr ? 'Gerar novo QR' : 'Conectar via QR Code'}
-              </button>
+              {canStartWeb && (
+                <button type="button" onClick={handleStartWeb} disabled={loading || startingWeb} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400">
+                  <RefreshCw size={16} className={startingWeb ? 'animate-spin' : ''} /> {startingWeb ? 'Gerando QR Code...' : 'Conectar via QR Code'}
+                </button>
+              )}
+              {!canStartWeb && !webConnected && (
+                <p className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-medium leading-6 text-amber-200">
+                  Para gerar um novo QR Code, desconecte a sessão atual primeiro.
+                </p>
+              )}
               <button type="button" onClick={onDisconnectWeb} disabled={loading || status.web.status === 'disconnected'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:text-slate-500">
                 Desconectar
               </button>

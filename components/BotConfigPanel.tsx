@@ -344,7 +344,7 @@ export default function BotConfigPanel({
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-white">Simulação do bot</p>
-                <p className="truncate text-xs text-slate-400">{form.assistant_name || 'Bot'} - conversa de teste do cliente</p>
+                <p className="truncate text-xs text-slate-400">{form.assistant_name || 'Bot'} - usa a configuração salva, igual ao WhatsApp</p>
               </div>
             </div>
             <button type="button" onClick={resetSimulation} disabled={refreshingSimulation} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto">
@@ -360,7 +360,7 @@ export default function BotConfigPanel({
                   <MessageCircle size={20} />
                 </div>
                 <p className="mt-4 text-base font-medium text-white">Nova conversa iniciada</p>
-                <p className="mt-2">{refreshingSimulation ? 'Recarregando configuração do banco...' : 'Digite ou anexe um arquivo como cliente para testar respostas, memória e comportamento do bot.'}</p>
+                <p className="mt-2">{refreshingSimulation ? 'Recarregando configuração do banco...' : 'Digite ou anexe um arquivo como cliente para testar o mesmo comportamento usado no WhatsApp.'}</p>
               </div>
             ) : (
               testMessages.map((message) => {
@@ -655,6 +655,10 @@ export default function BotConfigPanel({
           <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
             <input type="checkbox" checked={form.analyze_images} onChange={(event) => handleChange('analyze_images', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />
             Analisar imagens recebidas
+          </label>
+          <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
+            <input type="checkbox" checked={form.allow_audio_messages} onChange={(event) => handleChange('allow_audio_messages', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />
+            Permitir áudios de clientes
           </label>
           <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
             <input type="checkbox" checked={form.bot_enabled} onChange={(event) => handleChange('bot_enabled', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />

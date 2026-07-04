@@ -1,7 +1,11 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { login } from '@/lib/api';
+
+type LoginResponse = {
+  success?: boolean;
+  error?: string;
+};
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -14,15 +18,34 @@ export default function LoginPage() {
     setSubmitting(true);
     setError('');
 
-    const result = await login(email, password);
-    setSubmitting(false);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
 
-    if (!result.success) {
-      setError(result.error || 'Não foi possível entrar.');
-      return;
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal,
+      });
+      const result = await response.json().catch(() => ({}) as LoginResponse);
+
+      if (!response.ok || !result.success) {
+        setError(result.error || 'Não foi possível entrar.');
+        return;
+      }
+
+      window.location.href = '/';
+    } catch (error) {
+      setError(error instanceof DOMException && error.name === 'AbortError'
+        ? 'Tempo esgotado ao tentar entrar. Verifique sua conexão e tente novamente.'
+        : 'Não foi possível conectar ao servidor.');
+    } finally {
+      window.clearTimeout(timeout);
+      setSubmitting(false);
     }
-
-    window.location.href = '/';
   };
 
   return (
