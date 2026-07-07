@@ -486,7 +486,9 @@ export default function BotConfigPanel({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Configurar Bot</p>
-            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Assistente Bella</h2>
+            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">
+              {form.assistant_name ? `Assistente ${form.assistant_name}` : 'Configuração do assistente'}
+            </h2>
           </div>
           <button
             type="button"
@@ -654,7 +656,7 @@ export default function BotConfigPanel({
           </label>
           <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
             <input type="checkbox" checked={form.analyze_images} onChange={(event) => handleChange('analyze_images', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />
-            Analisar imagens recebidas
+            Permitir imagens de clientes
           </label>
           <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
             <input type="checkbox" checked={form.allow_audio_messages} onChange={(event) => handleChange('allow_audio_messages', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />

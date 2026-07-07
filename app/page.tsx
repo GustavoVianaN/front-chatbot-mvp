@@ -187,7 +187,7 @@ export default function Home() {
   const [onboardingDraft, setOnboardingDraft] = useState({
     company_name: '',
     segment: '',
-    assistant_name: 'Bella',
+    assistant_name: '',
     tone: '',
     response_length: 'média' as BotConfig['response_length'],
   });
@@ -248,7 +248,7 @@ export default function Home() {
     setOnboardingDraft((current) => ({
       company_name: current.company_name || botConfig.company_name || settings?.company_name || '',
       segment: current.segment || botConfig.segment || '',
-      assistant_name: current.assistant_name || botConfig.assistant_name || 'Bella',
+      assistant_name: current.assistant_name || botConfig.assistant_name || 'Atendente',
       tone: current.tone || botConfig.tone || '',
       response_length: current.response_length || botConfig.response_length || 'média',
     }));
@@ -682,7 +682,7 @@ export default function Home() {
                       <input
                         value={onboardingDraft.company_name}
                         onChange={(event) => updateOnboardingDraft('company_name', event.target.value)}
-                        placeholder="Bella Pizzaria"
+                        placeholder="Pamda Case"
                         className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
                       />
                     </label>
@@ -701,7 +701,7 @@ export default function Home() {
                 {onboardingStep === 2 && (
                   <div className="mx-auto max-w-2xl space-y-5">
                     <div className="grid gap-3 sm:grid-cols-3">
-                      {['Bella', 'Ana', 'Atendente'].map((name) => (
+                      {['Atendente', 'Ana', 'Assistente'].map((name) => (
                         <button
                           key={name}
                           type="button"
@@ -895,8 +895,8 @@ export default function Home() {
                     {[
                       ['Empresa', onboardingDraft.company_name || 'Não informado'],
                       ['Segmento', onboardingDraft.segment || 'Não informado'],
-                      ['Assistente', onboardingDraft.assistant_name || 'Bella'],
-                      ['Tom', onboardingDraft.tone || 'Padrão da Bella'],
+                      ['Assistente', onboardingDraft.assistant_name || 'Atendente'],
+                      ['Tom', onboardingDraft.tone || 'Padrão do assistente'],
                       ['Resposta', onboardingDraft.response_length],
                       ['Conhecimento', `${onboardingKnowledgeWords} palavras · ${companyIntakeFiles.length} arquivo${companyIntakeFiles.length === 1 ? '' : 's'} enviado${companyIntakeFiles.length === 1 ? '' : 's'}`],
                     ].map(([label, value]) => (
