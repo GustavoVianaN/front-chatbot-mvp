@@ -150,6 +150,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
   const [productImportPreview, setProductImportPreview] = useState<ProductImportPreview | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [productError, setProductError] = useState('');
+  const [productImportError, setProductImportError] = useState('');
   const [integrationDraft, setIntegrationDraft] = useState<IntegrationInput>(emptyIntegrationDraft);
   const [uploading, setUploading] = useState(false);
   const [savingLink, setSavingLink] = useState(false);
@@ -463,15 +464,23 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
 
   const handlePreviewProducts = async () => {
     if (!productImportFile || importingProducts) return;
-    setProductError('');
+    setProductImportError('');
+    setProductImportPreview(null);
     setImportingProducts(true);
 
     try {
       const payload = await productImportPayload();
       if (!payload) return;
-      setProductImportPreview(await previewProductItemsImport(payload));
+      const preview = await previewProductItemsImport(payload);
+      setProductImportPreview(preview);
+
+      if (preview.totalRows === 0) {
+        setProductImportError('Não encontrei linhas para pré-visualizar. Confira se o arquivo tem cabeçalho e pelo menos uma linha de produto.');
+      } else if (preview.validRows === 0) {
+        setProductImportError('Li o arquivo, mas nenhuma linha tem nome de produto. Use uma coluna chamada Nome, Produto, Item, Título ou Name.');
+      }
     } catch (error) {
-      setProductError(error instanceof Error ? error.message : 'Não foi possível pré-visualizar produtos.');
+      setProductImportError(error instanceof Error ? error.message : 'Não foi possível pré-visualizar produtos.');
     } finally {
       setImportingProducts(false);
     }
@@ -479,7 +488,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
 
   const handleImportProducts = async () => {
     if (!productImportFile || importingProducts) return;
-    setProductError('');
+    setProductImportError('');
     setImportingProducts(true);
 
     try {
@@ -490,7 +499,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
       setProductImportFile(null);
       setProductImportPreview(null);
     } catch (error) {
-      setProductError(error instanceof Error ? error.message : 'Não foi possível importar produtos.');
+      setProductImportError(error instanceof Error ? error.message : 'Não foi possível importar produtos.');
     } finally {
       setImportingProducts(false);
     }
@@ -769,6 +778,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
                 onChange={(event) => {
                   setProductImportFile(event.target.files?.[0] || null);
                   setProductImportPreview(null);
+                  setProductImportError('');
                 }}
                 className="hidden"
               />
@@ -780,19 +790,30 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
               Confirmar importação
             </button>
           </div>
+          {productImportError && (
+            <p className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm leading-5 text-rose-200">
+              {productImportError}
+            </p>
+          )}
           {productImportPreview && (
             <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-3">
               <p className="text-sm text-slate-300">{productImportPreview.validRows} item(ns) válidos, {productImportPreview.invalidRows} com erro.</p>
-              <div className="mt-3 max-h-64 overflow-auto rounded-xl border border-slate-800">
-                {productImportPreview.items.slice(0, 20).map((item) => (
-                  <div key={`${item.row}-${item.name}`} className="grid gap-2 border-b border-slate-800 p-3 text-xs text-slate-300 last:border-b-0 sm:grid-cols-[64px_1fr_1fr_1fr]">
-                    <span>Linha {item.row}</span>
-                    <span className="font-medium text-white">{item.name || 'Sem nome'}</span>
-                    <span>{item.price || 'Sem preço'}</span>
-                    <span className={item.valid ? 'text-emerald-300' : 'text-rose-300'}>{item.valid ? item.item_type : item.error}</span>
-                  </div>
-                ))}
-              </div>
+              {productImportPreview.items.length === 0 ? (
+                <div className="mt-3 rounded-xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+                  Nenhuma linha encontrada no arquivo.
+                </div>
+              ) : (
+                <div className="mt-3 max-h-64 overflow-auto rounded-xl border border-slate-800">
+                  {productImportPreview.items.slice(0, 20).map((item) => (
+                    <div key={`${item.row}-${item.name || item.error}`} className="grid gap-2 border-b border-slate-800 p-3 text-xs text-slate-300 last:border-b-0 sm:grid-cols-[64px_1fr_1fr_1fr]">
+                      <span>Linha {item.row}</span>
+                      <span className="font-medium text-white">{item.name || 'Sem nome'}</span>
+                      <span>{item.price || 'Sem preço'}</span>
+                      <span className={item.valid ? 'text-emerald-300' : 'text-rose-300'}>{item.valid ? item.item_type : item.error}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

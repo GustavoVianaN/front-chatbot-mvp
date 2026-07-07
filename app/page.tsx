@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Building2,
@@ -45,6 +45,12 @@ type CompanyIntakeDraftFile = {
   id: string;
   file: File;
   content_description: string;
+};
+type CompanyReadinessItem = {
+  id: string;
+  label: string;
+  value: string;
+  ready: boolean;
 };
 
 const companyIntakeFileTypes = new Set([
@@ -153,7 +159,122 @@ function buildLiveUnderstanding(text: string, files: CompanyIntakeDraftFile[], d
   return Array.from(new Set(items)).slice(0, 6);
 }
 
+function firstMatchingSentence(text: string, matcher: RegExp) {
+  const sentence = text
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .find((item) => matcher.test(item));
+
+  if (!sentence) return '';
+  return sentence.length > 92 ? `${sentence.slice(0, 89).trim()}...` : sentence;
+}
+
+function buildCompanyReadinessChecklist({
+  draft,
+  files,
+  summary,
+  text,
+}: {
+  draft: { company_name: string; segment: string; tone: string };
+  files: CompanyIntakeDraftFile[];
+  summary: string;
+  text: string;
+}): CompanyReadinessItem[] {
+  const evidence = [text, summary, ...files.map((item) => item.content_description)]
+    .join('\n')
+    .trim();
+  const hoursMatcher = /\b(hor[aá]rio|atendimento|segunda|ter[cç]a|quarta|quinta|sexta|s[áa]bado|domingo|seg|ter|qua|qui|sex|s[áa]b|dom|24h|das\s+\d{1,2}|[aà]s\s+\d{1,2}|\d{1,2}\s?h|\d{1,2}:\d{2})\b/i;
+  const productsMatcher = /\b(produto|servi[cç]o|capinha|capa|acess[oó]rio|personalizad|vendemos|vende|fabrica|produz|entrega|troca|pedido)\b/i;
+  const companyDoesReady = wordCount(evidence) >= 10;
+  const hoursValue = firstMatchingSentence(evidence, hoursMatcher);
+  const productsValue = firstMatchingSentence(evidence, productsMatcher);
+
+  return [
+    {
+      id: 'company_name',
+      label: 'Nome da empresa',
+      value: draft.company_name.trim() || 'Não informado',
+      ready: Boolean(draft.company_name.trim()),
+    },
+    {
+      id: 'segment',
+      label: 'Segmento',
+      value: draft.segment.trim() || 'Não informado',
+      ready: Boolean(draft.segment.trim()),
+    },
+    {
+      id: 'company_description',
+      label: 'O que a empresa faz',
+      value: companyDoesReady ? firstMatchingSentence(evidence, /.+/i) || 'Informado' : 'Não informado',
+      ready: companyDoesReady,
+    },
+    {
+      id: 'hours',
+      label: 'Horário de atendimento',
+      value: hoursValue || 'Não informado',
+      ready: Boolean(hoursValue),
+    },
+    {
+      id: 'products',
+      label: 'Produtos/serviços',
+      value: productsValue || 'Não informado',
+      ready: Boolean(productsValue),
+    },
+    {
+      id: 'files',
+      label: 'Upload de documentos',
+      value: files.length > 0 ? `${files.length} arquivo${files.length === 1 ? '' : 's'} enviado${files.length === 1 ? '' : 's'}` : 'Não informado',
+      ready: files.length > 0,
+    },
+    {
+      id: 'tone',
+      label: 'Tom da IA',
+      value: draft.tone.trim() || 'Não informado',
+      ready: Boolean(draft.tone.trim()),
+    },
+  ];
+}
+
+function TypewriterText({
+  text,
+  speed = 35,
+  className = '',
+  onComplete,
+}: {
+  text: string;
+  speed?: number;
+  className?: string;
+  onComplete?: () => void;
+}) {
+  const [displayed, setDisplayed] = useState('');
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    setDisplayed('');
+
+    let index = 0;
+
+    const interval = window.setInterval(() => {
+      index += 1;
+      setDisplayed(text.slice(0, index));
+
+      if (index >= text.length) {
+        window.clearInterval(interval);
+        onCompleteRef.current?.();
+      }
+    }, speed);
+
+    return () => window.clearInterval(interval);
+  }, [text, speed]);
+
+  return <p className={className}>{displayed}</p>;
+}
 export default function Home() {
+  const [showSecondBellaText, setShowSecondBellaText] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [botConfigTab, setBotConfigTab] = useState<BotConfigTab>('simulation');
   const [whatsappTab, setWhatsappTab] = useState<WhatsappTab>('status');
@@ -177,6 +298,7 @@ export default function Home() {
   const [companyIntakeFiles, setCompanyIntakeFiles] = useState<CompanyIntakeDraftFile[]>([]);
   const [companyIntakeError, setCompanyIntakeError] = useState('');
   const [companyIntakeSummary, setCompanyIntakeSummary] = useState('');
+  const [companyIntakeSummaryKey, setCompanyIntakeSummaryKey] = useState('');
   const [analyzingCompanyIntake, setAnalyzingCompanyIntake] = useState(false);
   const [savingCompanyIntake, setSavingCompanyIntake] = useState(false);
   const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>('hidden');
@@ -191,6 +313,13 @@ export default function Home() {
     tone: '',
     response_length: 'média' as BotConfig['response_length'],
   });
+  const companyIntakeAutoKeyRef = useRef('');
+  const lastAnalyzedCompanyIntakeKeyRef = useRef('');
+  useEffect(() => {
+    if (onboardingMode === 'wizard') {
+      setShowSecondBellaText(false);
+    }
+  }, [onboardingMode]);
 
   const loadPanel = async () => {
     try {
@@ -249,7 +378,7 @@ export default function Home() {
       company_name: current.company_name || botConfig.company_name || settings?.company_name || '',
       segment: current.segment || botConfig.segment || '',
       assistant_name: current.assistant_name || botConfig.assistant_name || 'Atendente',
-      tone: current.tone || botConfig.tone || '',
+      tone: current.tone || botConfig.tone || 'Amigável',
       response_length: current.response_length || botConfig.response_length || 'média',
     }));
 
@@ -293,7 +422,29 @@ export default function Home() {
   const companyName = botConfig?.company_name || settings?.company_name || selectedConversation?.company?.name || 'Painel de Atendimento';
   const whatsappConnected = Boolean(whatsappStatus?.connected || whatsappStatus?.web.status === 'connected');
   const liveUnderstanding = buildLiveUnderstanding(companyIntakeText, companyIntakeFiles, onboardingDraft);
-  const onboardingKnowledgeWords = wordCount(companyIntakeSummary || companyIntakeText);
+  const companyIntakeAutoKey = useMemo(() => JSON.stringify({
+    text: companyIntakeText.trim(),
+    files: companyIntakeFiles.map((item) => ({
+      name: item.file.name,
+      size: item.file.size,
+      lastModified: item.file.lastModified,
+      description: item.content_description.trim(),
+    })),
+  }), [companyIntakeFiles, companyIntakeText]);
+  const hasFreshCompanyIntakeSummary = Boolean(companyIntakeSummary.trim() && companyIntakeSummaryKey === companyIntakeAutoKey);
+  const effectiveCompanyIntakeSummary = hasFreshCompanyIntakeSummary ? companyIntakeSummary : '';
+  const waitingForAutoCompanyIntake = onboardingStep === 3
+    && Boolean(companyIntakeText.trim() || companyIntakeFiles.length > 0)
+    && !analyzingCompanyIntake
+    && lastAnalyzedCompanyIntakeKeyRef.current !== companyIntakeAutoKey;
+  const onboardingKnowledgeWords = wordCount(effectiveCompanyIntakeSummary || companyIntakeText);
+  const companyReadinessItems = useMemo(() => buildCompanyReadinessChecklist({
+    draft: onboardingDraft,
+    files: companyIntakeFiles,
+    summary: effectiveCompanyIntakeSummary,
+    text: companyIntakeText,
+  }), [companyIntakeFiles, companyIntakeText, effectiveCompanyIntakeSummary, onboardingDraft]);
+  const companyReadinessComplete = companyReadinessItems.every((item) => item.ready);
 
   const handleChangeSection = (section: string) => {
     setActiveSection(section as SectionId);
@@ -337,8 +488,16 @@ export default function Home() {
     ].slice(0, 10));
   };
 
-  const handleAnalyzeCompanyIntake = async () => {
+  useEffect(() => {
+    companyIntakeAutoKeyRef.current = companyIntakeAutoKey;
+  }, [companyIntakeAutoKey]);
+
+  const handleAnalyzeCompanyIntake = async (options?: { source?: 'auto' | 'manual'; key?: string }) => {
     if ((!companyIntakeText.trim() && companyIntakeFiles.length === 0) || analyzingCompanyIntake) return;
+    const targetKey = options?.key || companyIntakeAutoKey;
+
+    if (options?.source === 'auto' && lastAnalyzedCompanyIntakeKeyRef.current === targetKey) return;
+
     setCompanyIntakeError('');
     setAnalyzingCompanyIntake(true);
 
@@ -354,7 +513,11 @@ export default function Home() {
         company_text: companyIntakeText.trim(),
         files,
       });
-      setCompanyIntakeSummary(result.summary);
+      if (companyIntakeAutoKeyRef.current === targetKey) {
+        setCompanyIntakeSummary(result.summary);
+        setCompanyIntakeSummaryKey(targetKey);
+        lastAnalyzedCompanyIntakeKeyRef.current = targetKey;
+      }
     } catch (error) {
       setCompanyIntakeError(error instanceof Error ? error.message : 'Não foi possível analisar as informações da empresa.');
     } finally {
@@ -362,18 +525,31 @@ export default function Home() {
     }
   };
 
+  useEffect(() => {
+    if (onboardingMode === 'hidden' || onboardingStep !== 3) return;
+    if (!companyIntakeText.trim() && companyIntakeFiles.length === 0) return;
+    if (analyzingCompanyIntake) return;
+    if (lastAnalyzedCompanyIntakeKeyRef.current === companyIntakeAutoKey) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void handleAnalyzeCompanyIntake({ source: 'auto', key: companyIntakeAutoKey });
+    }, 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [analyzingCompanyIntake, companyIntakeAutoKey, companyIntakeFiles.length, companyIntakeText, onboardingMode, onboardingStep]);
+
   const handleSaveCompanyIntake = async () => {
-    if ((!companyIntakeSummary.trim() && companyIntakeFiles.length === 0) || savingCompanyIntake) return;
+    if ((!effectiveCompanyIntakeSummary.trim() && !companyIntakeText.trim() && companyIntakeFiles.length === 0) || savingCompanyIntake) return;
     setCompanyIntakeError('');
     setSavingCompanyIntake(true);
 
     try {
-      if (companyIntakeSummary.trim()) {
+      if ((effectiveCompanyIntakeSummary || companyIntakeText).trim()) {
         const createdKnowledge = await createKnowledge({
           title: 'Leitura inicial da empresa',
           category: 'Geral',
           content: [
-            companyIntakeSummary.trim(),
+            (effectiveCompanyIntakeSummary || companyIntakeText).trim(),
             companyIntakeText.trim() ? `\nTexto original informado pela empresa:\n${companyIntakeText.trim()}` : '',
           ].filter(Boolean).join('\n'),
           active: true,
@@ -421,12 +597,16 @@ export default function Home() {
       return Boolean(onboardingDraft.assistant_name.trim());
     }
 
+    if (onboardingStep === 3) {
+      return companyReadinessComplete;
+    }
+
     return true;
   };
 
   const handleNextOnboardingStep = () => {
     if (!onboardingStepIsValid()) {
-      toast('Preencha os campos principais para continuar.');
+      toast(onboardingStep === 3 ? 'Complete os itens marcados como Não para continuar.' : 'Preencha os campos principais para continuar.');
       return;
     }
 
@@ -451,13 +631,13 @@ export default function Home() {
         segment: onboardingDraft.segment.trim() || botConfig.segment,
         tone: onboardingDraft.tone.trim() || botConfig.tone,
         response_length: onboardingDraft.response_length,
-        company_description: companyIntakeText.trim() || companyIntakeSummary.trim() || botConfig.company_description,
+        company_description: companyIntakeText.trim() || effectiveCompanyIntakeSummary.trim() || botConfig.company_description,
       });
 
       setBotConfig(updated);
       setFinishingProgress(2);
 
-      if (companyIntakeSummary.trim() || companyIntakeFiles.length > 0) {
+      if (effectiveCompanyIntakeSummary.trim() || companyIntakeText.trim() || companyIntakeFiles.length > 0) {
         await handleSaveCompanyIntake();
       }
 
@@ -571,7 +751,7 @@ export default function Home() {
               </div>
               <h1 className="mt-6 text-3xl font-semibold text-white">Sua IA está pronta.</h1>
               <p className="mx-auto mt-4 max-w-lg text-base leading-7 text-slate-400">
-                Agora conecte seu WhatsApp para começar a atender clientes.
+                Agora conecte seu WhatsApp para começar a atender clientes. Caso tenha alguma dúvida pode me perguntar aqui mesmo.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <button
@@ -598,8 +778,17 @@ export default function Home() {
               <div className="grid min-h-[560px] lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                 <div className="flex flex-col justify-between border-b border-slate-800 bg-slate-950 p-6 sm:p-8 lg:border-b-0 lg:border-r">
                   <div>
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-950/40">
-                      <Sparkles size={26} />
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/40">
+                        <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
+                      </div>
+                      <div className="relative rounded-2xl border border-emerald-400/30 bg-slate-900 px-4 py-3 shadow-lg">
+                        <span className="absolute left-[-7px] top-5 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/30 bg-slate-900" />
+                        <p className="text-sm font-semibold text-white">Olá, eu sou a Bella.</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-300">
+                          Vou te ajudar a configurar seu bot e fazer os primeiros passos dele.
+                        </p>
+                      </div>
                     </div>
                     <p className="mt-8 text-xs uppercase tracking-[0.22em] text-emerald-300">Configuração inicial</p>
                     <h1 className="mt-3 max-w-xl text-3xl font-semibold leading-tight text-white sm:text-4xl">
@@ -648,6 +837,27 @@ export default function Home() {
           <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl items-center justify-center">
             <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/95 shadow-2xl sm:rounded-3xl">
               <div className="border-b border-slate-800 p-5 sm:p-6">
+                <div className="mb-5 flex items-start gap-4 rounded-2xl border border-emerald-400/20 bg-slate-950/70 p-4">
+                  <div className="bella-guide-avatar flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/30">
+                    <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
+                  </div>
+                  <div className="relative max-w-2xl rounded-2xl border border-emerald-400/30 bg-slate-900 px-4 py-3">
+                    <span className="absolute left-[-7px] top-6 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/30 bg-slate-900" />
+                    <TypewriterText
+                      text="Olá! Eu sou a Bella e vou ajudar você a configurar seu chatbot."
+                      className="text-sm font-semibold text-white"
+                      onComplete={() => setShowSecondBellaText(true)}
+                    />
+
+                    {showSecondBellaText && (
+                      <TypewriterText
+                        text="Em menos de 5 minutos, ele estará pronto para atender seus clientes. Caso tenha alguma dúvida pode me perguntar aqui ao lado."
+                        speed={25}
+                        className="mt-1 text-sm leading-6 text-slate-300"
+                      />
+                    )}
+                  </div>
+                </div>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.22em] text-emerald-300">Passo {onboardingStep} de {onboardingTotalSteps}</p>
@@ -794,23 +1004,40 @@ export default function Home() {
                       )}
 
                       {companyIntakeError && <p className="text-sm text-rose-300">{companyIntakeError}</p>}
-
-                      <button
-                        type="button"
-                        onClick={handleAnalyzeCompanyIntake}
-                        disabled={(!companyIntakeText.trim() && companyIntakeFiles.length === 0) || analyzingCompanyIntake}
-                        className="inline-flex w-full min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto"
-                      >
-                        <Sparkles size={16} />
-                        {analyzingCompanyIntake ? 'Processando...' : 'Gerar contexto'}
-                      </button>
                     </div>
 
                     <aside className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Resultado</p>
                       <h3 className="mt-2 text-lg font-semibold text-white">O que a IA entendeu</h3>
+                      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-white">Primeira camada</p>
+                            <p className="mt-1 text-xs leading-5 text-slate-500">Essencial para testar o bot.</p>
+                          </div>
+                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${companyReadinessComplete ? 'bg-emerald-500/15 text-emerald-200' : 'bg-amber-500/15 text-amber-200'}`}>
+                            {companyReadinessComplete ? 'Pronto' : 'Pendente'}
+                          </span>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {companyReadinessItems.map((item) => (
+                            <div key={item.id} className="grid gap-2 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 sm:grid-cols-[1fr_auto] sm:items-center">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-400">{item.label}</p>
+                                <p className={`mt-0.5 truncate text-sm ${item.ready ? 'text-white' : 'text-slate-500'}`}>{item.value}</p>
+                              </div>
+                              <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-bold ${item.ready ? 'bg-emerald-500/15 text-emerald-200' : 'bg-rose-500/15 text-rose-200'}`}>
+                                {item.ready ? 'OK' : 'Não'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className={`mt-3 text-xs leading-5 ${companyReadinessComplete ? 'text-emerald-200' : 'text-slate-500'}`}>
+                          {companyReadinessComplete ? 'Depois disso, o cliente já consegue testar o bot.' : 'Complete os itens com Não para liberar o próximo passo.'}
+                        </p>
+                      </div>
                       {analyzingCompanyIntake ? (
-                        <div className="mt-4 space-y-3">
+                        <div className="mt-5 space-y-3">
                           <div className="text-2xl">🧠</div>
                           <p className="text-sm font-semibold text-white">Lendo empresa...</p>
                           {contextProcessingItems.map((item) => (
@@ -820,10 +1047,16 @@ export default function Home() {
                             </div>
                           ))}
                         </div>
-                      ) : companyIntakeSummary ? (
-                        <p className="mt-4 max-h-[360px] overflow-y-auto whitespace-pre-line text-sm leading-6 text-slate-300">{companyIntakeSummary}</p>
+                      ) : effectiveCompanyIntakeSummary ? (
+                        <p className="mt-5 max-h-[260px] overflow-y-auto whitespace-pre-line text-sm leading-6 text-slate-300">{effectiveCompanyIntakeSummary}</p>
                       ) : liveUnderstanding.length > 0 ? (
-                        <div className="mt-4 space-y-3">
+                        <div className="mt-5 space-y-3">
+                          {waitingForAutoCompanyIntake && (
+                            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200">
+                              <RefreshCw size={13} className="animate-spin" />
+                              Processando informações...
+                            </div>
+                          )}
                           {liveUnderstanding.map((item) => (
                             <div key={item} className="flex gap-2 text-sm leading-6 text-slate-300">
                               <CheckCircle2 size={15} className="mt-1 shrink-0 text-emerald-300" />
@@ -832,7 +1065,7 @@ export default function Home() {
                           ))}
                         </div>
                       ) : (
-                        <p className="mt-4 text-sm leading-6 text-slate-500">
+                        <p className="mt-5 text-sm leading-6 text-slate-500">
                           Enquanto você digita, a IA organiza os principais pontos aqui.
                         </p>
                       )}
@@ -925,10 +1158,11 @@ export default function Home() {
 
                       {knowledgeReviewOpen ? (
                         <textarea
-                          value={companyIntakeSummary || companyIntakeText}
+                          value={effectiveCompanyIntakeSummary || companyIntakeText}
                           onChange={(event) => {
-                            if (companyIntakeSummary) {
+                            if (effectiveCompanyIntakeSummary) {
                               setCompanyIntakeSummary(event.target.value);
+                              setCompanyIntakeSummaryKey(companyIntakeAutoKey);
                             } else {
                               setCompanyIntakeText(event.target.value);
                             }
@@ -939,7 +1173,7 @@ export default function Home() {
                         />
                       ) : (
                         <p className="mt-4 max-h-48 overflow-y-auto whitespace-pre-line rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-sm leading-6 text-slate-300">
-                          {companyIntakeSummary || companyIntakeText || 'Nenhum contexto informado ainda.'}
+                          {effectiveCompanyIntakeSummary || companyIntakeText || 'Nenhum contexto informado ainda.'}
                         </p>
                       )}
                     </div>
@@ -959,7 +1193,8 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={handleNextOnboardingStep}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                    disabled={onboardingStep === 3 && !companyReadinessComplete}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                   >
                     Continuar
                     <ArrowRight size={16} />

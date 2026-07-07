@@ -224,6 +224,19 @@ select {
   animation: bellaHint 5s ease-in-out infinite;
 }
 
+.bella-guide-avatar {
+  animation: bellaGuideFloat 4.8s ease-in-out infinite;
+}
+
+@keyframes bellaGuideFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
 .theme-light .bella-hint {
   background-color: #ffffff;
   color: #0f172a;
