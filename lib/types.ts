@@ -6,6 +6,18 @@ export type Company = {
   updated_at: string;
 };
 
+export type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  companyId?: string | null;
+  onboardingCompleted: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type BotConfig = {
   id: string;
   company_id: string;
@@ -172,6 +184,11 @@ export type KnowledgeDescriptionAudio = {
   data_url: string;
 };
 
+export type KnowledgeDescriptionAudioPreview = {
+  transcription: string;
+  understanding: string;
+};
+
 export type KnowledgeStatus = {
   status: 'pronto' | 'processando' | 'erro';
   ready: number;
@@ -334,6 +351,8 @@ export type CompanyIntakeFile = {
 };
 
 export type CompanyIntakeInput = {
+  company_name?: string;
+  segment?: string;
   company_text: string;
   files: CompanyIntakeFile[];
 };

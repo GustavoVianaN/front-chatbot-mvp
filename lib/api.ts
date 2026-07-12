@@ -3,6 +3,7 @@
 import { cookies } from 'next/headers';
 import type {
   BotConfig,
+  AuthUser,
   AutomationRule,
   AutomationRuleInput,
   CompanyIntakeInput,
@@ -12,6 +13,8 @@ import type {
   IntegrationInput,
   KnowledgeFile,
   KnowledgeFileUpload,
+  KnowledgeDescriptionAudio,
+  KnowledgeDescriptionAudioPreview,
   KnowledgeItem,
   KnowledgeStatus,
   KnowledgeSource,
@@ -238,12 +241,62 @@ export async function getAuthState() {
   }
 }
 
+export async function getCurrentUser(): Promise<AuthUser> {
+  const payload = await apiRequest<{ authenticated: boolean; user: AuthUser }>('/auth/me');
+  return payload.user;
+}
+
+export async function markOnboardingCompleted(): Promise<AuthUser> {
+  const payload = await apiRequest<{ success: boolean; user: AuthUser }>('/auth/onboarding-completed', {
+    method: 'PATCH',
+    body: JSON.stringify({}),
+  });
+  return payload.user;
+}
+
 export async function getDashboard(): Promise<DashboardSummary> {
   return apiRequest('/dashboard');
 }
 
 export async function analyzeCompanyIntake(data: CompanyIntakeInput): Promise<{ summary: string }> {
   return apiRequest('/dashboard/company-intake/analyze', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function generateCompanyIntakeExample(data: { company_name: string; segment: string }): Promise<{ example: string }> {
+  return apiRequest('/dashboard/company-intake/example', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function generateCompanyIntakeFollowUpQuestion(data: {
+  company_name: string;
+  company_segment: string;
+  company_description: string;
+  question: string;
+  customer_answer: string;
+  question_count?: number;
+  mode?: 'service_flow_follow_up' | 'faq_follow_up';
+}): Promise<{ question: string; questions?: string[] }> {
+  return apiRequest('/dashboard/company-intake/follow-up-question', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function generateCompanyIntakeLearningSummary(data: {
+  company_name: string;
+  company_segment: string;
+  company_description: string;
+  conversation: Array<{
+    question: string;
+    answer: string;
+  }>;
+}): Promise<{ summary: string }> {
+  return apiRequest('/dashboard/company-intake/learning-summary', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -289,6 +342,13 @@ export async function getBotConfig(): Promise<BotConfig> {
 export async function updateBotConfig(data: BotConfig): Promise<BotConfig> {
   return apiRequest('/bot-config', {
     method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function generateBotConfigFieldSuggestion(data: { field: string; botConfig: BotConfig }): Promise<{ field: string; suggestion: string; cached?: boolean }> {
+  return apiRequest('/bot-config/suggest-field', {
+    method: 'POST',
     body: JSON.stringify(data),
   });
 }
@@ -371,6 +431,18 @@ export async function getKnowledgeSources(): Promise<KnowledgeSource[]> {
 
 export async function getKnowledgeStatus(): Promise<KnowledgeStatus> {
   return apiRequest('/knowledge-status');
+}
+
+export async function previewKnowledgeDescriptionAudio(input: {
+  audio: KnowledgeDescriptionAudio;
+  target: 'file' | 'link';
+  title?: string;
+  file_name?: string;
+}): Promise<KnowledgeDescriptionAudioPreview> {
+  return apiRequest('/knowledge-description-audio/preview', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function createKnowledgeSource(source: KnowledgeSourceInput) {

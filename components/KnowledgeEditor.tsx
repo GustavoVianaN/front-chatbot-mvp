@@ -1,9 +1,9 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ExternalLink, FileText, Image as ImageIcon, Link, Mic, Paperclip, RefreshCw, Search, Square, Trash2 } from 'lucide-react';
-import type { IntegrationConnection, IntegrationInput, KnowledgeDescriptionAudio, KnowledgeFile, KnowledgeFileUpload, KnowledgeItem, KnowledgeSource, KnowledgeSourceInput, KnowledgeStatus, ProductImportPreview, ProductItem, ProductItemInput } from '@/lib/types';
-import { createIntegrationConnection, createKnowledge, createKnowledgeFile, createKnowledgeSource, createProductItem, deleteKnowledge, deleteKnowledgeFile, deleteKnowledgeSource, deleteProductItem, getKnowledgeFileUrl, importProductItems, previewProductItemsImport, syncKnowledgeSource, updateIntegrationConnection, updateKnowledge, updateKnowledgeFile, updateKnowledgeSource, updateProductItem } from '@/lib/api';
+import { ArrowRight, CheckCircle2, ExternalLink, FileText, Image as ImageIcon, Link, Mic, Paperclip, RefreshCw, Search, Square, Trash2 } from 'lucide-react';
+import type { IntegrationConnection, IntegrationInput, KnowledgeDescriptionAudio, KnowledgeDescriptionAudioPreview, KnowledgeFile, KnowledgeFileUpload, KnowledgeItem, KnowledgeSource, KnowledgeSourceInput, KnowledgeStatus, ProductImportPreview, ProductItem, ProductItemInput } from '@/lib/types';
+import { createIntegrationConnection, createKnowledge, createKnowledgeFile, createKnowledgeSource, createProductItem, deleteKnowledge, deleteKnowledgeFile, deleteKnowledgeSource, deleteProductItem, getKnowledgeFileUrl, importProductItems, previewKnowledgeDescriptionAudio, previewProductItemsImport, syncKnowledgeSource, updateIntegrationConnection, updateKnowledge, updateKnowledgeFile, updateKnowledgeSource, updateProductItem } from '@/lib/api';
 
 type KnowledgeEditorProps = {
   knowledge: KnowledgeItem[];
@@ -82,6 +82,19 @@ const emptyProductDraft: ProductDraft = {
   ends_at: '',
 };
 const emptyIntegrationDraft: IntegrationInput = { provider: 'CRM', name: '', status: 'planned', config: '', active: false };
+const fieldLabelClass = 'grid gap-2 text-sm font-semibold text-slate-300';
+const fieldClass = 'h-14 w-full rounded-2xl border border-slate-700 bg-slate-950/90 px-4 text-sm text-white outline-none transition focus:border-emerald-400';
+const textareaClass = 'min-h-32 w-full rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400';
+const shortTextareaClass = 'min-h-24 w-full rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400';
+const primaryButtonClass = 'inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700';
+const secondaryButtonClass = 'inline-flex h-14 items-center justify-center gap-2 rounded-2xl border border-slate-700 px-5 text-sm font-semibold text-slate-300 transition hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60';
+
+function scrollToKnowledgeBlock(id: string) {
+  const element = document.getElementById(id);
+  element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const field = element?.querySelector('input, textarea, select, button') as HTMLElement | null;
+  field?.focus({ preventScroll: true });
+}
 
 function formatFileSize(size: number) {
   if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
@@ -158,6 +171,9 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
   const [importingProducts, setImportingProducts] = useState(false);
   const [savingIntegration, setSavingIntegration] = useState(false);
   const [recordingTarget, setRecordingTarget] = useState<'file' | 'link' | null>(null);
+  const [previewingAudioTarget, setPreviewingAudioTarget] = useState<'file' | 'link' | null>(null);
+  const [fileAudioPreview, setFileAudioPreview] = useState<KnowledgeDescriptionAudioPreview | null>(null);
+  const [linkAudioPreview, setLinkAudioPreview] = useState<KnowledgeDescriptionAudioPreview | null>(null);
   const [recordingError, setRecordingError] = useState('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -206,6 +222,35 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
     ].join(' ').toLowerCase().includes(value));
   }, [products, search]);
 
+  const knowledgeGuideItems = [
+    {
+      label: 'Adicionar uma resposta fixa',
+      description: 'Use para horários, trocas, prazo, preço, políticas ou uma pergunta frequente.',
+      ready: knowledge.some((item) => item.active && item.content.trim()),
+      target: 'knowledge-manual',
+    },
+    {
+      label: 'Enviar arquivos da empresa',
+      description: 'PDF, planilha, catálogo, tabela de preços ou imagens que o bot pode consultar.',
+      ready: files.some((file) => file.active),
+      target: 'knowledge-files',
+    },
+    {
+      label: 'Adicionar links úteis',
+      description: 'Site, Google Sheets, catálogo online, cardápio ou página pública.',
+      ready: sources.some((source) => source.active),
+      target: 'knowledge-links',
+    },
+    {
+      label: 'Cadastrar produtos ou preços',
+      description: 'Ajuda o bot a responder sobre catálogo, valores, modelos e promoções.',
+      ready: products.some((item) => item.active && item.name.trim()),
+      target: 'knowledge-products',
+    },
+  ];
+  const missingKnowledgeGuideItems = knowledgeGuideItems.filter((item) => !item.ready);
+  const nextKnowledgeGuideItems = (missingKnowledgeGuideItems.length ? missingKnowledgeGuideItems : knowledgeGuideItems).slice(0, 3);
+
   const handleSave = async () => {
     if (!draft.title || !draft.content) return;
     if (editing) {
@@ -223,6 +268,11 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
 
   const startDescriptionRecording = async (target: 'file' | 'link') => {
     setRecordingError('');
+    if (target === 'file') {
+      setFileAudioPreview(null);
+    } else {
+      setLinkAudioPreview(null);
+    }
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setRecordingError('Seu navegador não permite gravação de áudio aqui.');
@@ -258,6 +308,26 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
         stream.getTracks().forEach((track) => track.stop());
         mediaRecorderRef.current = null;
         setRecordingTarget(null);
+
+        try {
+          setPreviewingAudioTarget(target);
+          const preview = await previewKnowledgeDescriptionAudio({
+            audio,
+            target,
+            title: target === 'file' ? fileDraft.title : linkDraft.title,
+            file_name: target === 'file' ? fileDraft.files[0]?.name : linkDraft.url,
+          });
+
+          if (target === 'file') {
+            setFileAudioPreview(preview);
+          } else {
+            setLinkAudioPreview(preview);
+          }
+        } catch (error) {
+          setRecordingError(error instanceof Error ? error.message : 'Não foi possível transcrever o áudio agora.');
+        } finally {
+          setPreviewingAudioTarget(null);
+        }
       };
 
       recorder.start();
@@ -341,6 +411,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
 
       onFilesChange([...createdFiles.reverse(), ...files]);
       setFileDraft(emptyFileDraft);
+      setFileAudioPreview(null);
     } catch (error) {
       setFileError(error instanceof Error ? error.message : 'Não foi possível enviar o arquivo.');
     } finally {
@@ -382,6 +453,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
       const created = await createKnowledgeSource(payload);
       onSourcesChange([created, ...sources]);
       setLinkDraft(emptyLinkDraft);
+      setLinkAudioPreview(null);
     } catch (error) {
       setLinkError(error instanceof Error ? error.message : 'Não foi possível sincronizar o link.');
     } finally {
@@ -526,20 +598,17 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Arquivos</p>
             <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Arquivos e informações do cliente</h2>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative w-full sm:max-w-xs">
+          <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,280px)_180px] xl:w-auto">
+            <div className="relative">
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar" className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-slate-500" />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar conteúdo" className="h-14 w-full rounded-2xl border border-slate-700 bg-slate-950/90 pl-10 pr-4 text-sm text-white outline-none transition focus:border-emerald-400" />
             </div>
-            <label className="space-y-2 text-sm text-slate-300">
-              Categoria
-              <select value={activeCategory} onChange={(event) => setActiveCategory(event.target.value)} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500">
-                <option value="Todas">Todas</option>
-                {categories.map((category) => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-            </label>
+            <select aria-label="Filtrar por categoria" value={activeCategory} onChange={(event) => setActiveCategory(event.target.value)} className={fieldClass}>
+              <option value="Todas">Todas as categorias</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -557,54 +626,118 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
           ))}
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-3">
-          <div className="space-y-4">
-            <p className="text-sm font-semibold text-white">Informação para o bot</p>
-            <label className="space-y-2 text-sm text-slate-300">
+        <div className="mt-5 rounded-3xl border border-emerald-500/20 bg-slate-950/80 p-4">
+          <div className="flex items-start gap-3">
+            <img src="/brand/bella-avatar.png" alt="Bella" className="bella-guide-avatar h-14 w-14 rounded-2xl border border-emerald-500/30 bg-slate-900 object-cover" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-emerald-300">Bella</p>
+              <p className="mt-2 text-lg font-bold leading-8 text-white sm:text-xl">
+                Aqui você ensina o bot com arquivos, links, produtos e respostas prontas.
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-400">
+                Comece pelo que você já tem. Eu marquei abaixo os próximos pontos que mais ajudam a melhorar as respostas.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            {nextKnowledgeGuideItems.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => scrollToKnowledgeBlock(item.target)}
+                className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-left transition hover:border-emerald-500/40 hover:bg-slate-900"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-white">{item.label}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">{item.description}</p>
+                  </div>
+                  <span className={item.ready ? 'rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-bold text-emerald-200' : 'rounded-full bg-amber-500/10 px-2 py-1 text-xs font-bold text-amber-200'}>
+                    {item.ready ? 'OK' : 'Falta'}
+                  </span>
+                </div>
+                <span className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-emerald-200">
+                  Ir para preencher <ArrowRight size={14} />
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-3">
+          <div id="knowledge-manual" className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300">
+                <FileText size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">Texto manual</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Use para horários, políticas, regras e respostas fixas.</p>
+              </div>
+            </div>
+            <div className="grid gap-4">
+            <label className={fieldLabelClass}>
               Título
-              <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+              <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} className={fieldClass} />
             </label>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className={fieldLabelClass}>
               Categoria
-              <select value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500">
+              <select value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} className={fieldClass}>
                 {categories.map((category) => <option key={category} value={category}>{category}</option>)}
               </select>
             </label>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className={fieldLabelClass}>
               Conteúdo
-              <textarea value={draft.content} onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))} rows={5} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+              <textarea value={draft.content} onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))} rows={5} className={textareaClass} />
             </label>
             <div className="flex flex-wrap gap-3">
-              <button type="button" onClick={handleSave} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 sm:w-auto">
+              <button type="button" onClick={handleSave} className={`${primaryButtonClass} w-full sm:w-auto`}>
                 <CheckCircle2 size={16} /> {editing ? 'Atualizar item' : 'Adicionar item'}
               </button>
               {editing && (
-                <button type="button" onClick={() => {
+              <button type="button" onClick={() => {
                   setEditing(null);
                   setDraft({ title: '', category: 'Horários', content: '' });
-                }} className="rounded-2xl border border-slate-700 px-4 py-3 text-sm text-slate-300 transition hover:border-slate-500 hover:text-slate-100">
+                }} className={secondaryButtonClass}>
                   Cancelar
                 </button>
               )}
             </div>
+            </div>
           </div>
 
-          <div className="space-y-4">
-            <p className="text-sm font-semibold text-white">Arquivo do cliente</p>
-            <label className="space-y-2 text-sm text-slate-300">
+          <div id="knowledge-files" className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300">
+                <Paperclip size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">Arquivos</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">PDFs, planilhas, catálogos, textos e imagens.</p>
+              </div>
+            </div>
+            <div className="grid gap-4">
+            <label className={fieldLabelClass}>
               Título
-              <input value={fileDraft.title} onChange={(event) => setFileDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Opcional quando enviar vários arquivos" className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+              <input value={fileDraft.title} onChange={(event) => setFileDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Opcional quando enviar vários arquivos" className={fieldClass} />
             </label>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className={fieldLabelClass}>
               Descrição
-              <textarea value={fileDraft.description} onChange={(event) => setFileDraft((current) => ({ ...current, description: event.target.value }))} rows={2} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+              <textarea value={fileDraft.description} onChange={(event) => setFileDraft((current) => ({ ...current, description: event.target.value }))} rows={2} className={shortTextareaClass} />
             </label>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className={fieldLabelClass}>
               Texto extraído ou observações para o bot
-              <textarea value={fileDraft.extracted_text} onChange={(event) => setFileDraft((current) => ({ ...current, extracted_text: event.target.value }))} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+              <textarea value={fileDraft.extracted_text} onChange={(event) => setFileDraft((current) => ({ ...current, extracted_text: event.target.value }))} rows={3} className={shortTextareaClass} />
             </label>
-            <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-500">
-              <Paperclip size={16} /> {fileDraft.files.length > 0 ? `${fileDraft.files.length} arquivo(s) selecionado(s)` : 'Selecionar até 100 PDF, Word, Excel, PowerPoint, CSV, TXT ou imagens'}
+            <label className="group flex min-h-20 w-full cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-slate-200 transition hover:border-emerald-400 hover:bg-emerald-500/5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-emerald-300 group-hover:bg-emerald-500/10">
+                <Paperclip size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-semibold text-white">{fileDraft.files.length > 0 ? `${fileDraft.files.length} arquivo(s) selecionado(s)` : 'Selecionar arquivos'}</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">PDF, DOCX, XLSX, CSV, TXT, PowerPoint ou imagens.</span>
+              </span>
               <input
                 type="file"
                 multiple
@@ -622,14 +755,14 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
               </div>
             )}
             <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-              <label className="space-y-2 text-sm text-slate-300">
+              <label className={fieldLabelClass}>
                 Explique para a IA o que é esse conteúdo
                 <textarea
                   value={fileDraft.content_description}
                   onChange={(event) => setFileDraft((current) => ({ ...current, content_description: event.target.value }))}
                   rows={3}
                   placeholder="Ex: Essa planilha tem nome dos produtos, preços e estoque."
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500"
+                  className={shortTextareaClass}
                 />
               </label>
               <p className="text-xs leading-5 text-slate-400">Você pode escrever ou gravar um áudio explicando rapidamente como a IA deve usar esse conteúdo.</p>
@@ -639,48 +772,78 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
               <button
                 type="button"
                 onClick={() => recordingTarget === 'file' ? stopDescriptionRecording() : void startDescriptionRecording('file')}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white sm:w-auto"
+                className={`${secondaryButtonClass} w-full bg-slate-900 sm:w-auto`}
               >
                 {recordingTarget === 'file' ? <Square size={16} /> : <Mic size={16} />}
                 {recordingTarget === 'file' ? 'Parar gravação' : fileDraft.content_description_audio ? 'Gravar novamente' : 'Gravar áudio'}
               </button>
-              {fileDraft.content_description_audio && recordingTarget !== 'file' && <p className="text-xs text-emerald-300">Áudio gravado. Ele será transcrito ao enviar.</p>}
+              {previewingAudioTarget === 'file' && (
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                  <p className="flex items-center gap-2 font-semibold">
+                    <RefreshCw size={14} className="animate-spin" />
+                    Transcrevendo áudio e lendo o que você explicou...
+                  </p>
+                </div>
+              )}
+              {fileAudioPreview && recordingTarget !== 'file' && previewingAudioTarget !== 'file' && (
+                <div className="grid gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Transcrição</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-200">{fileAudioPreview.transcription || 'Não foi possível transcrever com clareza.'}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">O que a IA entendeu</p>
+                    <p className="mt-1 text-sm leading-6 text-white">{fileAudioPreview.understanding}</p>
+                  </div>
+                </div>
+              )}
+              {fileDraft.content_description_audio && recordingTarget !== 'file' && !fileAudioPreview && previewingAudioTarget !== 'file' && <p className="text-xs text-emerald-300">Áudio gravado.</p>}
             </div>
             {recordingError && <p className="text-sm text-rose-300">{recordingError}</p>}
             {fileError && <p className="text-sm text-rose-300">{fileError}</p>}
-            <button type="button" onClick={handleUploadFile} disabled={fileDraft.files.length === 0 || uploading} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 sm:w-auto">
+            <button type="button" onClick={handleUploadFile} disabled={fileDraft.files.length === 0 || uploading} className={`${primaryButtonClass} w-full`}>
               <CheckCircle2 size={16} /> {uploading ? `Enviando ${fileDraft.files.length} arquivo(s)...` : 'Enviar arquivo(s)'}
             </button>
+            </div>
           </div>
 
-          <div className="space-y-4">
-            <p className="text-sm font-semibold text-white">Link público</p>
-            <label className="space-y-2 text-sm text-slate-300">
+          <div id="knowledge-links" className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300">
+                <Link size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">Links</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Site, Google Sheets, catálogo público ou página externa.</p>
+              </div>
+            </div>
+            <div className="grid gap-4">
+            <label className={fieldLabelClass}>
               Nome
-              <input value={linkDraft.title} onChange={(event) => setLinkDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Tabela de preços" className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+              <input value={linkDraft.title} onChange={(event) => setLinkDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Tabela de preços" className={fieldClass} />
             </label>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className={fieldLabelClass}>
               Tipo
-              <select value={linkDraft.source_type} onChange={(event) => setLinkDraft((current) => ({ ...current, source_type: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500">
+              <select value={linkDraft.source_type} onChange={(event) => setLinkDraft((current) => ({ ...current, source_type: event.target.value }))} className={fieldClass}>
                 <option value="google_sheets">Google Sheets</option>
                 <option value="csv">CSV público</option>
                 <option value="page">Página pública</option>
                 <option value="other">Outro link</option>
               </select>
             </label>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className={fieldLabelClass}>
               URL
-              <input value={linkDraft.url} onChange={(event) => setLinkDraft((current) => ({ ...current, url: event.target.value }))} placeholder="https://docs.google.com/spreadsheets/..." className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+              <input value={linkDraft.url} onChange={(event) => setLinkDraft((current) => ({ ...current, url: event.target.value }))} placeholder="https://docs.google.com/spreadsheets/..." className={fieldClass} />
             </label>
             <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-              <label className="space-y-2 text-sm text-slate-300">
+              <label className={fieldLabelClass}>
                 Explique para a IA o que é esse conteúdo
                 <textarea
                   value={linkDraft.content_description}
                   onChange={(event) => setLinkDraft((current) => ({ ...current, content_description: event.target.value }))}
                   rows={3}
                   placeholder="Ex: Essa planilha tem nome dos produtos, preços e estoque."
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500"
+                  className={shortTextareaClass}
                 />
               </label>
               <p className="text-xs leading-5 text-slate-400">Você pode escrever ou gravar um áudio explicando rapidamente como a IA deve usar esse conteúdo.</p>
@@ -690,88 +853,129 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
               <button
                 type="button"
                 onClick={() => recordingTarget === 'link' ? stopDescriptionRecording() : void startDescriptionRecording('link')}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white sm:w-auto"
+                className={`${secondaryButtonClass} w-full bg-slate-900 sm:w-auto`}
               >
                 {recordingTarget === 'link' ? <Square size={16} /> : <Mic size={16} />}
                 {recordingTarget === 'link' ? 'Parar gravação' : linkDraft.content_description_audio ? 'Gravar novamente' : 'Gravar áudio'}
               </button>
-              {linkDraft.content_description_audio && recordingTarget !== 'link' && <p className="text-xs text-emerald-300">Áudio gravado. Ele será transcrito ao salvar.</p>}
+              {previewingAudioTarget === 'link' && (
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                  <p className="flex items-center gap-2 font-semibold">
+                    <RefreshCw size={14} className="animate-spin" />
+                    Transcrevendo áudio e lendo o que você explicou...
+                  </p>
+                </div>
+              )}
+              {linkAudioPreview && recordingTarget !== 'link' && previewingAudioTarget !== 'link' && (
+                <div className="grid gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Transcrição</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-200">{linkAudioPreview.transcription || 'Não foi possível transcrever com clareza.'}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">O que a IA entendeu</p>
+                    <p className="mt-1 text-sm leading-6 text-white">{linkAudioPreview.understanding}</p>
+                  </div>
+                </div>
+              )}
+              {linkDraft.content_description_audio && recordingTarget !== 'link' && !linkAudioPreview && previewingAudioTarget !== 'link' && <p className="text-xs text-emerald-300">Áudio gravado.</p>}
             </div>
-            <label className="space-y-2 text-sm text-slate-300">
+            <label className={fieldLabelClass}>
               Descrição
-              <textarea value={linkDraft.description} onChange={(event) => setLinkDraft((current) => ({ ...current, description: event.target.value }))} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+              <textarea value={linkDraft.description} onChange={(event) => setLinkDraft((current) => ({ ...current, description: event.target.value }))} rows={3} className={shortTextareaClass} />
             </label>
             {recordingError && <p className="text-sm text-rose-300">{recordingError}</p>}
             {linkError && <p className="text-sm text-rose-300">{linkError}</p>}
-            <button type="button" onClick={handleCreateSource} disabled={!linkDraft.title.trim() || !linkDraft.url.trim() || savingLink} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 sm:w-auto">
+            <button type="button" onClick={handleCreateSource} disabled={!linkDraft.title.trim() || !linkDraft.url.trim() || savingLink} className={`${primaryButtonClass} w-full`}>
               <Link size={16} /> {savingLink ? 'Sincronizando...' : 'Adicionar link'}
             </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+      <div id="knowledge-products" className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Comercial</p>
             <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Produtos, catálogo e promoções</h2>
           </div>
         </div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          <label className="space-y-2 text-sm text-slate-300">
+        <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="mb-4 flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300">
+              <CheckCircle2 size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">{editingProductId ? 'Editando item comercial' : 'Adicionar item comercial'}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Cadastre um produto, serviço, catálogo ou promoção individualmente.</p>
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <label className={fieldLabelClass}>
             Tipo
-            <select value={productDraft.item_type} onChange={(event) => setProductDraft((current) => ({ ...current, item_type: event.target.value as ProductDraft['item_type'] }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500">
+            <select value={productDraft.item_type} onChange={(event) => setProductDraft((current) => ({ ...current, item_type: event.target.value as ProductDraft['item_type'] }))} className={fieldClass}>
               <option value="produto">Produto</option>
               <option value="serviço">Serviço</option>
               <option value="catalogo">Catálogo</option>
               <option value="promocao">Promoção</option>
             </select>
           </label>
-          <label className="space-y-2 text-sm text-slate-300">
+          <label className={fieldLabelClass}>
             Nome
-            <input value={productDraft.name} onChange={(event) => setProductDraft((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            <input value={productDraft.name} onChange={(event) => setProductDraft((current) => ({ ...current, name: event.target.value }))} className={fieldClass} />
           </label>
-          <label className="space-y-2 text-sm text-slate-300">
+          <label className={fieldLabelClass}>
             Preço
-            <input value={productDraft.price} onChange={(event) => setProductDraft((current) => ({ ...current, price: event.target.value }))} placeholder="R$ 99,90" className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            <input value={productDraft.price} onChange={(event) => setProductDraft((current) => ({ ...current, price: event.target.value }))} placeholder="R$ 99,90" className={fieldClass} />
           </label>
-          <label className="space-y-2 text-sm text-slate-300">
+          <label className={fieldLabelClass}>
             Categoria
-            <input value={productDraft.category} onChange={(event) => setProductDraft((current) => ({ ...current, category: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            <input value={productDraft.category} onChange={(event) => setProductDraft((current) => ({ ...current, category: event.target.value }))} className={fieldClass} />
           </label>
-          <label className="space-y-2 text-sm text-slate-300">
+          <label className={fieldLabelClass}>
             SKU/código
-            <input value={productDraft.sku} onChange={(event) => setProductDraft((current) => ({ ...current, sku: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            <input value={productDraft.sku} onChange={(event) => setProductDraft((current) => ({ ...current, sku: event.target.value }))} className={fieldClass} />
           </label>
-          <label className="space-y-2 text-sm text-slate-300">
+          <label className={fieldLabelClass}>
             Fonte
-            <input value={productDraft.source} onChange={(event) => setProductDraft((current) => ({ ...current, source: event.target.value }))} placeholder="Planilha, catálogo, campanha..." className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            <input value={productDraft.source} onChange={(event) => setProductDraft((current) => ({ ...current, source: event.target.value }))} placeholder="Planilha, catálogo, campanha..." className={fieldClass} />
           </label>
-          <label className="space-y-2 text-sm text-slate-300 lg:col-span-3">
+          <label className={`${fieldLabelClass} lg:col-span-3`}>
             Descrição
-            <textarea value={productDraft.description} onChange={(event) => setProductDraft((current) => ({ ...current, description: event.target.value }))} rows={3} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            <textarea value={productDraft.description} onChange={(event) => setProductDraft((current) => ({ ...current, description: event.target.value }))} rows={3} className={shortTextareaClass} />
           </label>
-          <label className="space-y-2 text-sm text-slate-300 lg:col-span-3">
+          <label className={`${fieldLabelClass} lg:col-span-3`}>
             URL da imagem
-            <input value={productDraft.image_url} onChange={(event) => setProductDraft((current) => ({ ...current, image_url: event.target.value }))} placeholder="https://..." className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            <input value={productDraft.image_url} onChange={(event) => setProductDraft((current) => ({ ...current, image_url: event.target.value }))} placeholder="https://..." className={fieldClass} />
           </label>
-        </div>
-        {productError && <p className="mt-4 text-sm text-rose-300">{productError}</p>}
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button type="button" onClick={handleSaveProduct} disabled={!productDraft.name.trim() || savingProduct} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 sm:w-auto">
-            <CheckCircle2 size={16} /> {editingProductId ? 'Atualizar item' : 'Adicionar item'}
-          </button>
-          {editingProductId && (
-            <button type="button" onClick={() => { setEditingProductId(null); setProductDraft(emptyProductDraft); }} className="rounded-2xl border border-slate-700 px-4 py-3 text-sm text-slate-300 transition hover:border-slate-500 hover:text-slate-100">
-              Cancelar
+          </div>
+          {productError && <p className="mt-4 text-sm text-rose-300">{productError}</p>}
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            {editingProductId && (
+              <button type="button" onClick={() => { setEditingProductId(null); setProductDraft(emptyProductDraft); }} className={secondaryButtonClass}>
+                Cancelar
+              </button>
+            )}
+            <button type="button" onClick={handleSaveProduct} disabled={!productDraft.name.trim() || savingProduct} className={`${primaryButtonClass} sm:min-w-40`}>
+              <CheckCircle2 size={16} /> {editingProductId ? 'Atualizar item' : 'Adicionar item'}
             </button>
-          )}
+          </div>
         </div>
-        <div className="mt-5 rounded-3xl border border-slate-800 bg-slate-950/70 p-4">
-          <p className="text-sm font-semibold text-white">Importar produtos por planilha ou arquivo</p>
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <label className="inline-flex min-h-[48px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-500">
-              <Paperclip size={16} /> {productImportFile ? productImportFile.name : 'Selecionar Excel, CSV, TXT, PDF, Word ou PowerPoint'}
+        <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-slate-300">
+              <Paperclip size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Importar por planilha ou arquivo</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Pré-visualize antes de importar para conferir nomes, preços e linhas inválidas.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+            <label className="inline-flex h-14 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-4 text-sm font-medium text-slate-200 transition hover:border-emerald-400 hover:bg-emerald-500/5">
+              <Paperclip size={16} className="shrink-0" />
+              <span className="truncate">{productImportFile ? productImportFile.name : 'Selecionar planilha ou catálogo'}</span>
               <input
                 type="file"
                 accept=".xls,.xlsx,.csv,.txt,.pdf,.doc,.docx,.ppt,.pptx,text/csv,text/plain,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -783,10 +987,10 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
                 className="hidden"
               />
             </label>
-            <button type="button" onClick={handlePreviewProducts} disabled={!productImportFile || importingProducts} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto">
+            <button type="button" onClick={handlePreviewProducts} disabled={!productImportFile || importingProducts} className={`${secondaryButtonClass} lg:min-w-36`}>
               {importingProducts ? 'Lendo...' : 'Pré-visualizar'}
             </button>
-            <button type="button" onClick={handleImportProducts} disabled={!productImportFile || !productImportPreview?.validRows || importingProducts} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto">
+            <button type="button" onClick={handleImportProducts} disabled={!productImportFile || !productImportPreview?.validRows || importingProducts} className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 lg:min-w-44">
               Confirmar importação
             </button>
           </div>
@@ -939,7 +1143,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
+      <div id="knowledge-integrations" className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
         <p className="text-sm font-semibold text-white">Itens comerciais cadastrados</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredProducts.length === 0 ? (
@@ -984,9 +1188,9 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
           </div>
         </div>
         <div className="mt-6 grid gap-4 lg:grid-cols-4">
-          <label className="space-y-2 text-sm text-slate-300">
+          <label className={fieldLabelClass}>
             Provedor
-            <select value={integrationDraft.provider} onChange={(event) => setIntegrationDraft((current) => ({ ...current, provider: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500">
+            <select value={integrationDraft.provider} onChange={(event) => setIntegrationDraft((current) => ({ ...current, provider: event.target.value }))} className={fieldClass}>
               <option value="ERP">ERP</option>
               <option value="CRM">CRM</option>
               <option value="Shopify">Shopify</option>
@@ -998,24 +1202,24 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
               <option value="Outro">Outro</option>
             </select>
           </label>
-          <label className="space-y-2 text-sm text-slate-300">
+          <label className={fieldLabelClass}>
             Nome
-            <input value={integrationDraft.name} onChange={(event) => setIntegrationDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Minha integração" className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            <input value={integrationDraft.name} onChange={(event) => setIntegrationDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Minha integração" className={fieldClass} />
           </label>
-          <label className="space-y-2 text-sm text-slate-300">
+          <label className={fieldLabelClass}>
             Status
-            <select value={integrationDraft.status} onChange={(event) => setIntegrationDraft((current) => ({ ...current, status: event.target.value }))} className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500">
+            <select value={integrationDraft.status} onChange={(event) => setIntegrationDraft((current) => ({ ...current, status: event.target.value }))} className={fieldClass}>
               <option value="planned">Planejada</option>
               <option value="configured">Configurada</option>
               <option value="error">Erro</option>
             </select>
           </label>
-          <button type="button" onClick={handleCreateIntegration} disabled={!integrationDraft.name.trim() || savingIntegration} className="self-end inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700">
+          <button type="button" onClick={handleCreateIntegration} disabled={!integrationDraft.name.trim() || savingIntegration} className={`${primaryButtonClass} self-end w-full`}>
             Adicionar
           </button>
-          <label className="space-y-2 text-sm text-slate-300 lg:col-span-4">
+          <label className={`${fieldLabelClass} lg:col-span-4`}>
             Configuração/observações
-            <textarea value={integrationDraft.config} onChange={(event) => setIntegrationDraft((current) => ({ ...current, config: event.target.value }))} rows={3} placeholder="Campos necessários, URL, observações ou instruções para ativar depois." className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
+            <textarea value={integrationDraft.config} onChange={(event) => setIntegrationDraft((current) => ({ ...current, config: event.target.value }))} rows={3} placeholder="Campos necessários, URL, observações ou instruções para ativar depois." className={shortTextareaClass} />
           </label>
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">

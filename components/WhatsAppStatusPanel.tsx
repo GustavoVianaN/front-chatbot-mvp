@@ -26,11 +26,40 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
   const webConnected = status.web.status === 'connected';
   const webWaitingQr = status.web.status === 'qr_pending' && status.web.qrCode;
   const canStartWeb = status.web.status === 'disconnected';
+  const transientStreamError = /stream errored|restart required/i.test(status.web.lastError || '');
+  const shouldShowWebError = Boolean(status.web.lastError) && (
+    status.web.status === 'disconnected' || !transientStreamError
+  );
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('Teste de conexão via WhatsApp Web.');
   const [sendingTest, setSendingTest] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [startingWeb, setStartingWeb] = useState(false);
+  const bellaTitle = webConnected
+    ? 'WhatsApp conectado. Agora você já pode testar o envio.'
+    : webWaitingQr
+      ? 'Escaneie esse QR Code no celular que vai atender os clientes.'
+      : status.web.status === 'connecting'
+        ? 'Estou preparando a conexão. Em alguns segundos o QR Code aparece aqui.'
+        : 'Para conectar, gere um QR Code e escaneie pelo WhatsApp do celular.';
+  const bellaSteps = webConnected
+    ? [
+      'Confira se o número conectado está correto.',
+      'Envie uma mensagem de teste antes de liberar o atendimento.',
+      'Se quiser trocar de celular, clique em desconectar primeiro.',
+    ]
+    : webWaitingQr
+      ? [
+        'Abra o WhatsApp no celular.',
+        'Toque em aparelhos conectados.',
+        'Escaneie o QR Code que aparece na tela.',
+      ]
+      : [
+        'Clique em conectar via QR Code.',
+        'Aguarde o código aparecer.',
+        'Escaneie pelo WhatsApp do celular.',
+      ];
+  const bellaStatus = webConnected ? 'Pronto' : webWaitingQr ? 'Aguardando leitura' : status.web.status === 'connecting' ? 'Conectando' : 'Pendente';
 
   const handleRefresh = async (message: string) => {
     if (refreshing || loading) return;
@@ -84,6 +113,36 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
           </div>
         </div>
 
+        <div className="mt-6 rounded-3xl border border-emerald-500/20 bg-slate-950/80 p-4">
+          <div className="flex items-start gap-3">
+            <img src="/brand/bella-avatar.png" alt="Bella" className="bella-guide-avatar h-14 w-14 rounded-2xl border border-emerald-500/30 bg-slate-900 object-cover" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-[0.18em] text-emerald-300">Bella</p>
+                  <p className="mt-2 text-lg font-bold leading-8 text-white sm:text-xl">{bellaTitle}</p>
+                </div>
+                <span className={webConnected ? 'rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-200' : 'rounded-full bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-200'}>
+                  {bellaStatus}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-3">
+                {bellaSteps.map((step, index) => (
+                  <div key={step} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Passo {index + 1}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-200">{step}</p>
+                  </div>
+                ))}
+              </div>
+              {!webConnected && (
+                <p className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs leading-5 text-slate-400">
+                  Dica: se já existir uma sessão antiga, desconecte primeiro e gere um novo QR Code. Isso evita erro ao tentar conectar de novo.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="mt-6 grid gap-4 xl:grid-cols-2">
           <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
@@ -133,11 +192,14 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
             {webWaitingQr && (
               <div className="mt-5 flex flex-col items-center gap-3 rounded-3xl border border-slate-800 bg-white p-4">
                 <img src={status.web.qrCode} alt="QR Code do WhatsApp Web" className="h-64 w-64 max-w-full" />
-                <p className="text-center text-sm font-medium text-slate-900">Abra o WhatsApp no celular, toque em aparelhos conectados e escaneie este QR Code.</p>
+                <div className="max-w-xl text-center">
+                  <p className="text-sm font-bold text-slate-950">Pegue o celular que vai atender os clientes e escaneie este código.</p>
+                  <p className="mt-1 text-xs font-medium leading-5 text-slate-600">WhatsApp &gt; Configurações &gt; Aparelhos conectados &gt; Conectar aparelho.</p>
+                </div>
               </div>
             )}
 
-            {status.web.lastError && (
+            {shouldShowWebError && (
               <p className="mt-4 rounded-2xl border border-rose-600/30 bg-rose-600/10 p-3 text-sm text-rose-200">{status.web.lastError}</p>
             )}
 
