@@ -38,26 +38,26 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
   const bellaTitle = webConnected
     ? 'WhatsApp conectado. Agora você já pode testar o envio.'
     : webWaitingQr
-      ? 'Escaneie esse QR Code no celular que vai atender os clientes.'
+      ? 'Escaneie esse QR Code no telefone que vai atender os clientes.'
       : status.web.status === 'connecting'
         ? 'Estou preparando a conexão. Em alguns segundos o QR Code aparece aqui.'
-        : 'Para conectar, gere um QR Code e escaneie pelo WhatsApp do celular.';
+        : 'Para conectar, gere um QR Code e escaneie pelo WhatsApp do telefone.';
   const bellaSteps = webConnected
     ? [
       'Confira se o número conectado está correto.',
       'Envie uma mensagem de teste antes de liberar o atendimento.',
-      'Se quiser trocar de celular, clique em desconectar primeiro.',
+      'Se quiser trocar de telefone, clique em desconectar primeiro.',
     ]
     : webWaitingQr
       ? [
-        'Abra o WhatsApp no celular.',
+        'Abra o WhatsApp no telefone.',
         'Toque em aparelhos conectados.',
         'Escaneie o QR Code que aparece na tela.',
       ]
       : [
         'Clique em conectar via QR Code.',
         'Aguarde o código aparecer.',
-        'Escaneie pelo WhatsApp do celular.',
+        'Escaneie pelo WhatsApp do telefone.',
       ];
   const bellaStatus = webConnected ? 'Pronto' : webWaitingQr ? 'Aguardando leitura' : status.web.status === 'connecting' ? 'Conectando' : 'Pendente';
 
@@ -177,7 +177,7 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
                 <p className="mt-2 text-sm leading-6 text-slate-400">
                   {webConnected
                     ? `Número conectado: ${status.web.phoneNumber || 'WhatsApp Web'}`
-                    : 'Escaneie o QR Code no celular do cliente para ativar esse canal.'}
+                    : 'Escaneie o QR Code no telefone do cliente para ativar esse canal.'}
                 </p>
                 {status.web.warning && (
                   <p className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium leading-5 text-amber-200">{status.web.warning}</p>
@@ -193,7 +193,7 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
               <div className="mt-5 flex flex-col items-center gap-3 rounded-3xl border border-slate-800 bg-white p-4">
                 <img src={status.web.qrCode} alt="QR Code do WhatsApp Web" className="h-64 w-64 max-w-full" />
                 <div className="max-w-xl text-center">
-                  <p className="text-sm font-bold text-slate-950">Pegue o celular que vai atender os clientes e escaneie este código.</p>
+                  <p className="text-sm font-bold text-slate-950">Pegue o telefone que vai atender os clientes e escaneie este código.</p>
                   <p className="mt-1 text-xs font-medium leading-5 text-slate-600">WhatsApp &gt; Configurações &gt; Aparelhos conectados &gt; Conectar aparelho.</p>
                 </div>
               </div>
