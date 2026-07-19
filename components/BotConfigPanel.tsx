@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight, CheckCircle2, FileText, MessageCircle, Paperclip, Plus, RotateCcw, Send, Sparkles, TestTube2, Trash2, Wand2, X } from 'lucide-react';
-import type { AutomationRule, AutomationRuleInput, BotConfig, SimulationAttachment, SimulationLog } from '@/lib/types';
-import { generateBotConfigFieldSuggestion, generateBotTestResponse, getSimulationLogs } from '@/lib/api';
+import type { AutomationRule, AutomationRuleInput, BotConfig, ImageGenerationUsage, SimulationAttachment, SimulationLog } from '@/lib/types';
+import { generateBotConfigFieldSuggestion, generateBotTestResponse, getImageGenerationUsage, getSimulationLogs } from '@/lib/api';
 
 type BotConfigPanelProps = {
   botConfig: BotConfig;
@@ -229,6 +229,7 @@ export default function BotConfigPanel({
   onFocusFieldDone,
 }: BotConfigPanelProps) {
   const [form, setForm] = useState<BotConfig>(botConfig);
+  const [imageGenerationUsage, setImageGenerationUsage] = useState<ImageGenerationUsage | null>(null);
   const [newRule, setNewRule] = useState<AutomationRuleInput>(defaultRule);
   const [testMessage, setTestMessage] = useState('');
   const [testMessages, setTestMessages] = useState<TestMessage[]>([]);
@@ -255,6 +256,14 @@ export default function BotConfigPanel({
       .then(setSimulationLogs)
       .catch(() => undefined);
   }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'config' || !botConfig.allow_image_generation) return;
+
+    getImageGenerationUsage()
+      .then(setImageGenerationUsage)
+      .catch(() => undefined);
+  }, [botConfig.allow_image_generation, mode]);
 
   useEffect(() => {
     if (!focusField || mode !== 'config') return;
@@ -302,6 +311,9 @@ export default function BotConfigPanel({
       const payload = normalizeInstructionsForSave(form);
       await onSave(payload);
       setSavedConfigSnapshot(payload);
+      if (payload.allow_image_generation) {
+        getImageGenerationUsage().then(setImageGenerationUsage).catch(() => undefined);
+      }
     } finally {
       setSaving(false);
     }
@@ -1048,6 +1060,10 @@ export default function BotConfigPanel({
                     Permitir imagens de clientes
                   </label>
                   <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
+                    <input type="checkbox" checked={form.allow_image_generation} onChange={(event) => handleChange('allow_image_generation', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />
+                    Permitir geração de imagens
+                  </label>
+                  <label className="inline-flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
                     <input type="checkbox" checked={form.allow_audio_messages} onChange={(event) => handleChange('allow_audio_messages', event.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-emerald-500" />
                     Permitir áudios de clientes
                   </label>
@@ -1064,6 +1080,87 @@ export default function BotConfigPanel({
                     Bloquear prompt injection
                   </label>
                 </div>
+                {form.allow_image_generation && (
+                  <>
+                    <label id="bot-field-image_generation_instructions" className="space-y-2 text-sm text-slate-300 lg:col-span-2">
+                      Instruções para geração de imagens
+                      <textarea
+                        value={form.image_generation_instructions}
+                        onChange={(event) => handleChange('image_generation_instructions', event.target.value)}
+                        rows={7}
+                        placeholder="Explique quando gerar, quais dados são obrigatórios e como deve ser o resultado visual."
+                        className="w-full rounded-3xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500"
+                      />
+                      <span className="block text-xs leading-5 text-slate-500">O bot só gera quando o cliente pedir uma criação, prévia, mockup ou simulação visual.</span>
+                    </label>
+
+                    <div className="space-y-4 rounded-3xl border border-amber-500/20 bg-slate-950/80 p-4 lg:col-span-2">
+                      <div>
+                        <p className="text-sm font-bold text-white">Travas de segurança e consumo</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-400">Os limites são persistidos no banco e aplicados antes de qualquer cobrança de geração.</p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                        <label className="space-y-1 text-xs text-slate-400">Empresa / 24h
+                          <input type="number" min={1} value={form.image_generation_company_daily_limit} onChange={(event) => handleChange('image_generation_company_daily_limit', Number(event.target.value))} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-400">Cliente / 24h
+                          <input type="number" min={1} value={form.image_generation_user_daily_limit} onChange={(event) => handleChange('image_generation_user_daily_limit', Number(event.target.value))} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-400">Por conversa
+                          <input type="number" min={1} value={form.image_generation_conversation_limit} onChange={(event) => handleChange('image_generation_conversation_limit', Number(event.target.value))} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-400">Intervalo (s)
+                          <input type="number" min={5} value={form.image_generation_cooldown_seconds} onChange={(event) => handleChange('image_generation_cooldown_seconds', Number(event.target.value))} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-400">Duplicada (min)
+                          <input type="number" min={1} value={form.image_generation_duplicate_window_minutes} onChange={(event) => handleChange('image_generation_duplicate_window_minutes', Number(event.target.value))} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+                        </label>
+                      </div>
+                    </div>
+
+                    {imageGenerationUsage && (
+                      <div className="space-y-4 rounded-3xl border border-emerald-500/20 bg-slate-950/80 p-4 lg:col-span-2">
+                        <div className="grid gap-3 sm:grid-cols-4">
+                          {[
+                            ['Geradas', imageGenerationUsage.totals.completed],
+                            ['Últimas 24h', imageGenerationUsage.totals.completed_today],
+                            ['Bloqueadas', imageGenerationUsage.totals.blocked],
+                            ['Falhas', imageGenerationUsage.totals.failed],
+                          ].map(([label, value]) => (
+                            <div key={String(label)} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+                              <p className="text-xs text-slate-500">{label}</p>
+                              <p className="mt-1 text-xl font-bold text-white">{value}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-white">Imagens geradas por cliente</p>
+                          {imageGenerationUsage.users.length === 0 ? (
+                            <p className="mt-2 text-sm text-slate-500">Nenhuma imagem gerada ainda.</p>
+                          ) : (
+                            <div className="mt-3 overflow-x-auto">
+                              <table className="w-full min-w-[620px] text-left text-sm">
+                                <thead className="text-xs uppercase text-slate-500"><tr><th className="pb-2">Cliente</th><th className="pb-2">Telefone</th><th className="pb-2">Geradas</th><th className="pb-2">24h</th><th className="pb-2">Bloqueadas</th><th className="pb-2">Última</th></tr></thead>
+                                <tbody className="divide-y divide-slate-800">
+                                  {imageGenerationUsage.users.map((usage) => (
+                                    <tr key={usage.contact_id}>
+                                      <td className="py-2 text-white">{usage.name || 'Sem nome'}</td>
+                                      <td className="py-2 text-slate-400">{usage.phone}</td>
+                                      <td className="py-2 text-slate-300">{usage.completed}</td>
+                                      <td className="py-2 text-slate-300">{usage.completed_today}</td>
+                                      <td className="py-2 text-slate-300">{usage.blocked}</td>
+                                      <td className="py-2 text-slate-400">{usage.last_generated_at ? new Date(usage.last_generated_at).toLocaleString('pt-BR') : '-'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </>
             )}
           </div>

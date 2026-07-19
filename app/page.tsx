@@ -500,7 +500,13 @@ export default function Home() {
     assistant_name: '',
     tone: '',
     response_length: 'média' as BotConfig['response_length'],
+    use_emojis: true,
+    analyze_images: false,
+    allow_image_generation: false,
+    allow_audio_messages: true,
+    bot_enabled: true,
   });
+  const onboardingFlagsInitializedRef = useRef(false);
   const companyIntakeAutoKeyRef = useRef('');
   const lastAnalyzedCompanyIntakeKeyRef = useRef('');
   const companyGuidedScrollRef = useRef<HTMLDivElement | null>(null);
@@ -571,7 +577,13 @@ export default function Home() {
       assistant_name: current.assistant_name || botConfig.assistant_name || 'Atendente',
       tone: current.tone || botConfig.tone || 'Amigável',
       response_length: current.response_length || botConfig.response_length || 'média',
+      use_emojis: onboardingFlagsInitializedRef.current ? current.use_emojis : botConfig.use_emojis,
+      analyze_images: onboardingFlagsInitializedRef.current ? current.analyze_images : botConfig.analyze_images,
+      allow_image_generation: onboardingFlagsInitializedRef.current ? current.allow_image_generation : botConfig.allow_image_generation,
+      allow_audio_messages: onboardingFlagsInitializedRef.current ? current.allow_audio_messages : botConfig.allow_audio_messages,
+      bot_enabled: onboardingFlagsInitializedRef.current ? current.bot_enabled : botConfig.bot_enabled,
     }));
+    onboardingFlagsInitializedRef.current = true;
 
     if (currentUser?.onboardingCompleted) {
       if (onboardingMode === 'ready') return;
@@ -1334,6 +1346,11 @@ export default function Home() {
         segment: nextSegment,
         tone: nextTone,
         response_length: onboardingDraft.response_length,
+        use_emojis: onboardingDraft.use_emojis,
+        analyze_images: onboardingDraft.analyze_images,
+        allow_image_generation: onboardingDraft.allow_image_generation,
+        allow_audio_messages: onboardingDraft.allow_audio_messages,
+        bot_enabled: onboardingDraft.bot_enabled,
         company_description: nextCompanyDescription,
         welcome_message: botConfig.welcome_message?.trim() ? botConfig.welcome_message : automaticWelcomeMessage,
         response_rules: requiredResponseRules,
@@ -2084,6 +2101,35 @@ export default function Home() {
                         <span className="text-right text-sm font-semibold text-white">{value}</span>
                       </div>
                     ))}
+
+                    <div className="rounded-2xl border border-emerald-500/20 bg-slate-950/70 p-4">
+                      <div>
+                        <p className="text-sm font-semibold text-white">Recursos que estarão disponíveis</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-500">Revise e escolha o que deseja permitir antes de concluir.</p>
+                      </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {([
+                          ['use_emojis', 'Permitir emojis'],
+                          ['analyze_images', 'Permitir imagens de clientes'],
+                          ['allow_image_generation', 'Permitir geração de imagens'],
+                          ['allow_audio_messages', 'Permitir áudios de clientes'],
+                          ['bot_enabled', 'Bot ativo'],
+                        ] as const).map(([field, label]) => (
+                          <label key={field} className={`flex cursor-pointer items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition ${onboardingDraft[field] ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-slate-800 bg-slate-900/70'}`}>
+                            <span className="text-sm font-semibold text-slate-200">{label}</span>
+                            <span className="inline-flex items-center gap-2">
+                              <span className={`text-xs font-bold ${onboardingDraft[field] ? 'text-emerald-300' : 'text-slate-500'}`}>{onboardingDraft[field] ? 'Ativado' : 'Desativado'}</span>
+                              <input
+                                type="checkbox"
+                                checked={onboardingDraft[field]}
+                                onChange={(event) => updateOnboardingDraft(field, event.target.checked)}
+                                className="h-5 w-5 rounded border-slate-700 bg-slate-800 text-emerald-500"
+                              />
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
 
                     <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

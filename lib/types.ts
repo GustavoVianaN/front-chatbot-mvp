@@ -49,6 +49,13 @@ export type BotConfig = {
   use_markdown: boolean;
   use_emojis: boolean;
   analyze_images: boolean;
+  allow_image_generation: boolean;
+  image_generation_instructions: string;
+  image_generation_company_daily_limit: number;
+  image_generation_user_daily_limit: number;
+  image_generation_conversation_limit: number;
+  image_generation_cooldown_seconds: number;
+  image_generation_duplicate_window_minutes: number;
   allow_audio_messages: boolean;
   farewell_message: string;
   max_wait_seconds: number;
@@ -71,6 +78,25 @@ export type BotConfig = {
   new_conversation_started_message: string;
   created_at: string;
   updated_at: string;
+};
+
+export type ImageGenerationUsage = {
+  totals: {
+    completed: number;
+    blocked: number;
+    failed: number;
+    completed_today: number;
+  };
+  users: Array<{
+    contact_id: string;
+    phone: string;
+    name: string;
+    completed: number;
+    completed_today: number;
+    blocked: number;
+    failed: number;
+    last_generated_at: string;
+  }>;
 };
 
 export type Contact = {

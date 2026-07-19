@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { ArrowRight, CheckCircle2, ExternalLink, FileText, Image as ImageIcon, Link, Mic, Paperclip, RefreshCw, Search, Square, Trash2 } from 'lucide-react';
+import { ArrowRight, Building2, CheckCircle2, ExternalLink, FileText, Image as ImageIcon, Link, Mic, Package, Paperclip, RefreshCw, Search, Square, Trash2 } from 'lucide-react';
 import type { IntegrationConnection, IntegrationInput, KnowledgeDescriptionAudio, KnowledgeDescriptionAudioPreview, KnowledgeFile, KnowledgeFileUpload, KnowledgeItem, KnowledgeSource, KnowledgeSourceInput, KnowledgeStatus, ProductImportPreview, ProductItem, ProductItemInput } from '@/lib/types';
 import { createIntegrationConnection, createKnowledge, createKnowledgeFile, createKnowledgeSource, createProductItem, deleteKnowledge, deleteKnowledgeFile, deleteKnowledgeSource, deleteProductItem, getKnowledgeFileUrl, importProductItems, previewKnowledgeDescriptionAudio, previewProductItemsImport, syncKnowledgeSource, updateIntegrationConnection, updateKnowledge, updateKnowledgeFile, updateKnowledgeSource, updateProductItem } from '@/lib/api';
 
@@ -61,12 +61,11 @@ const maxFilesPerUpload = 100;
 const emptyFileDraft: FileDraft = { title: '', description: '', content_description: '', extracted_text: '', files: [] };
 const emptyLinkDraft: LinkDraft = { title: '', source_type: 'google_sheets', url: '', description: '', content_description: '' };
 const contentDescriptionExamples = [
-  'Essa planilha tem produtos, preços e estoque.',
   'Esse PDF explica os serviços da empresa.',
-  'Essa imagem é uma tabela de preços.',
-  'Esse link tem o cardápio atualizado.',
+  'Esse documento explica as políticas de troca e atendimento.',
+  'Esse link tem os horários e endereços atualizados.',
   'Esse arquivo tem perguntas frequentes dos clientes.',
-  'É um catálogo completo. Use tudo.',
+  'Esse documento contém o passo a passo do suporte.',
 ];
 const emptyProductDraft: ProductDraft = {
   item_type: 'produto',
@@ -231,7 +230,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
     },
     {
       label: 'Enviar arquivos da empresa',
-      description: 'PDF, planilha, catálogo, tabela de preços ou imagens que o bot pode consultar.',
+      description: 'PDF, texto ou imagem com políticas, processos, FAQ e informações institucionais.',
       ready: files.some((file) => file.active),
       target: 'knowledge-files',
     },
@@ -596,7 +595,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Arquivos</p>
-            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Arquivos e informações do cliente</h2>
+            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Base de atendimento e produtos</h2>
           </div>
           <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,280px)_180px] xl:w-auto">
             <div className="relative">
@@ -624,6 +623,48 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
               <p className="mt-2 break-words text-sm font-semibold text-white">{item.value}</p>
             </div>
           ))}
+        </div>
+
+        <div className="mt-5 rounded-3xl border border-slate-700 bg-slate-950/90 p-4 sm:p-5">
+          <div>
+            <p className="text-sm font-bold text-white">Onde devo adicionar cada informação?</p>
+            <p className="mt-1 text-sm leading-6 text-slate-400">Escolha pelo tipo do conteúdo. As duas áreas alimentam o bot, mas têm finalidades diferentes.</p>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => scrollToKnowledgeBlock('knowledge-manual')}
+              className="group rounded-3xl border border-sky-500/30 bg-sky-500/10 p-5 text-left transition hover:border-sky-400 hover:bg-sky-500/15"
+            >
+              <div className="flex items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-200"><Building2 size={21} /></span>
+                <div>
+                  <span className="rounded-full bg-sky-500/15 px-2.5 py-1 text-xs font-bold text-sky-200">BASE DE ATENDIMENTO</span>
+                  <p className="mt-3 text-base font-bold text-white">Informações da empresa para atender clientes</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-300">Horários, endereço, políticas, processos, perguntas frequentes, documentos, respostas prontas e links institucionais.</p>
+                  <p className="mt-3 text-xs font-semibold text-sky-200">Não use para cadastrar dados pessoais de consumidores.</p>
+                </div>
+              </div>
+              <span className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-sky-200">Adicionar informação de atendimento <ArrowRight size={14} /></span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => scrollToKnowledgeBlock('knowledge-products')}
+              className="group rounded-3xl border border-violet-500/30 bg-violet-500/10 p-5 text-left transition hover:border-violet-400 hover:bg-violet-500/15"
+            >
+              <div className="flex items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-200"><Package size={21} /></span>
+                <div>
+                  <span className="rounded-full bg-violet-500/15 px-2.5 py-1 text-xs font-bold text-violet-200">PRODUTOS E SERVIÇOS</span>
+                  <p className="mt-3 text-base font-bold text-white">Informações comerciais do catálogo</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-300">Nome, descrição, preço, categoria, código/SKU, estoque, modelos, promoções, cardápios e catálogos.</p>
+                  <p className="mt-3 text-xs font-semibold text-violet-200">Use quando o cliente puder perguntar “quanto custa?” ou “qual modelo tem?”.</p>
+                </div>
+              </div>
+              <span className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-violet-200">Adicionar produto ou serviço <ArrowRight size={14} /></span>
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 rounded-3xl border border-emerald-500/20 bg-slate-950/80 p-4">
@@ -672,8 +713,8 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
                 <FileText size={18} />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">Texto manual</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">Use para horários, políticas, regras e respostas fixas.</p>
+                <p className="text-sm font-semibold text-white">Informação de atendimento</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Horários, políticas, regras, processos, FAQ e respostas fixas da empresa.</p>
               </div>
             </div>
             <div className="grid gap-4">
@@ -713,8 +754,8 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
                 <Paperclip size={18} />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">Arquivos</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">PDFs, planilhas, catálogos, textos e imagens.</p>
+                <p className="text-sm font-semibold text-white">Documentos da empresa</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">PDFs, textos e imagens com informações de atendimento. Catálogos e preços ficam na área de Produtos.</p>
               </div>
             </div>
             <div className="grid gap-4">
@@ -761,7 +802,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
                   value={fileDraft.content_description}
                   onChange={(event) => setFileDraft((current) => ({ ...current, content_description: event.target.value }))}
                   rows={3}
-                  placeholder="Ex: Essa planilha tem nome dos produtos, preços e estoque."
+                  placeholder="Ex: Esse PDF contém as políticas de troca e o passo a passo do atendimento."
                   className={shortTextareaClass}
                 />
               </label>
@@ -842,7 +883,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
                   value={linkDraft.content_description}
                   onChange={(event) => setLinkDraft((current) => ({ ...current, content_description: event.target.value }))}
                   rows={3}
-                  placeholder="Ex: Essa planilha tem nome dos produtos, preços e estoque."
+                  placeholder="Ex: Esse link contém os horários, endereços e regras de atendimento."
                   className={shortTextareaClass}
                 />
               </label>
@@ -897,8 +938,9 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
       <div id="knowledge-products" className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Comercial</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-violet-300 sm:text-sm sm:tracking-[0.24em]">Produtos e serviços · área comercial</p>
             <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">Produtos, catálogo e promoções</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-400">Cadastre aqui somente itens que tenham nome comercial, preço, modelo, código, estoque, promoção ou descrição de venda.</p>
           </div>
         </div>
         <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
@@ -1025,7 +1067,7 @@ export default function KnowledgeEditor({ knowledge, onChange, files, onFilesCha
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
-          <p className="text-sm font-semibold text-white">Informações cadastradas</p>
+          <p className="text-sm font-semibold text-white">Informações de atendimento cadastradas</p>
           <div className="mt-4 grid gap-4">
             {filtered.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/60 p-8 text-center text-slate-400">Nenhum item encontrado.</div>

@@ -9,6 +9,7 @@ import type {
   CompanyIntakeInput,
   Conversation,
   DashboardSummary,
+  ImageGenerationUsage,
   IntegrationConnection,
   IntegrationInput,
   KnowledgeFile,
@@ -337,6 +338,10 @@ export async function updateConversationBot(id: string, enabled: boolean) {
 
 export async function getBotConfig(): Promise<BotConfig> {
   return apiRequest('/bot-config');
+}
+
+export async function getImageGenerationUsage(): Promise<ImageGenerationUsage> {
+  return apiRequest('/bot-config/image-generation-usage');
 }
 
 export async function updateBotConfig(data: BotConfig): Promise<BotConfig> {
