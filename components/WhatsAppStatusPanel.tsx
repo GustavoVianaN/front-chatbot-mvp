@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Copy, RefreshCw, ShieldCheck } from 'lucide-react';
 import type { WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
-import { testWhatsappWebMessage } from '@/lib/api';
 import { toast } from '@/components/Toast';
 
 type WhatsAppStatusPanelProps = {
@@ -30,13 +29,10 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
   const shouldShowWebError = Boolean(status.web.lastError) && (
     status.web.status === 'disconnected' || !transientStreamError
   );
-  const [testPhone, setTestPhone] = useState('');
-  const [testMessage, setTestMessage] = useState('Teste de conexão via WhatsApp Web.');
-  const [sendingTest, setSendingTest] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [startingWeb, setStartingWeb] = useState(false);
   const bellaTitle = webConnected
-    ? 'WhatsApp conectado. Agora você já pode testar o envio.'
+    ? 'WhatsApp conectado e pronto para receber mensagens.'
     : webWaitingQr
       ? 'Escaneie esse QR Code no telefone que vai atender os clientes.'
       : status.web.status === 'connecting'
@@ -45,7 +41,7 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
   const bellaSteps = webConnected
     ? [
       'Confira se o número conectado está correto.',
-      'Envie uma mensagem de teste antes de liberar o atendimento.',
+      'O atendimento acontece diretamente pelo WhatsApp conectado.',
       'Se quiser trocar de telefone, clique em desconectar primeiro.',
     ]
     : webWaitingQr
@@ -74,20 +70,6 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
     }
   };
 
-  const handleSendTest = async () => {
-    if (!testPhone.trim() || !testMessage.trim() || sendingTest) return;
-
-    setSendingTest(true);
-    try {
-      await testWhatsappWebMessage(testPhone, testMessage);
-      toast('Mensagem de teste enviada pelo WhatsApp Web.');
-      setTestMessage('Teste de conexão via WhatsApp Web.');
-    } catch (error) {
-      toast(error instanceof Error ? error.message : 'Não foi possível enviar a mensagem de teste.');
-    } finally {
-      setSendingTest(false);
-    }
-  };
 
   const handleStartWeb = async () => {
     if (startingWeb || loading) return;
@@ -217,23 +199,6 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
               <button type="button" onClick={onDisconnectWeb} disabled={loading || status.web.status === 'disconnected'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:text-slate-500">
                 Desconectar
               </button>
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-              <p className="text-sm font-semibold text-white">Teste de envio pelo WhatsApp Web</p>
-              <div className="mt-4 grid gap-3">
-                <label className="space-y-2 text-sm text-slate-300">
-                  Telefone com DDI e DDD
-                  <input value={testPhone} onChange={(event) => setTestPhone(event.target.value)} placeholder="5511999999999" className="w-full rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
-                </label>
-                <label className="space-y-2 text-sm text-slate-300">
-                  Mensagem
-                  <textarea value={testMessage} onChange={(event) => setTestMessage(event.target.value)} rows={3} className="w-full resize-none rounded-2xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-white outline-none focus:border-slate-500" />
-                </label>
-                <button type="button" onClick={handleSendTest} disabled={!webConnected || !testPhone.trim() || !testMessage.trim() || sendingTest} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 sm:w-auto">
-                  Enviar teste
-                </button>
-              </div>
             </div>
 
             <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">

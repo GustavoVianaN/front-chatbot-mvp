@@ -588,13 +588,6 @@ export async function disconnectWhatsappWeb(): Promise<WhatsAppStatus['web']> {
   });
 }
 
-export async function testWhatsappWebMessage(to: string, message: string) {
-  return apiRequest<{ success: true; to: string; queuedDelayMs: number }>('/whatsapp-web/test-message', {
-    method: 'POST',
-    body: JSON.stringify({ to, message }),
-  });
-}
-
 export async function getWhatsappDisconnectEvents(): Promise<WhatsAppDisconnectEvent[]> {
   return apiRequest('/whatsapp/disconnect-events');
 }

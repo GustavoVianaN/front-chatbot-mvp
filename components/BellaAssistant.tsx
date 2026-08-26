@@ -14,7 +14,7 @@ const starterMessages: BellaMessage[] = [
   {
     id: 'bella-welcome',
     role: 'assistant',
-    text: 'Oi, eu sou a Bella. Posso te ajudar a configurar o bot, testar a simulação, organizar arquivos, entender o WhatsApp e navegar pelo painel.',
+    text: 'Oi, eu sou a Bella. Posso te ajudar a configurar o bot, organizar arquivos, entender o WhatsApp e navegar pelo painel.',
   },
 ];
 

@@ -39,7 +39,7 @@ const sections = [
 ] as const;
 
 type SectionId = (typeof sections)[number]['id'];
-type BotConfigTab = 'simulation' | 'config' | 'knowledge';
+type BotConfigTab = 'config' | 'knowledge';
 type WhatsappTab = 'status' | 'conversations';
 type ThemeMode = 'dark' | 'light';
 type OnboardingMode = 'hidden' | 'welcome' | 'wizard' | 'finishing' | 'ready';
@@ -445,7 +445,7 @@ function TypewriterText({
 export default function Home() {
   const [showSecondBellaText, setShowSecondBellaText] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
-  const [botConfigTab, setBotConfigTab] = useState<BotConfigTab>('simulation');
+  const [botConfigTab, setBotConfigTab] = useState<BotConfigTab>('config');
   const [whatsappTab, setWhatsappTab] = useState<WhatsappTab>('status');
   const [botConfigFocusField, setBotConfigFocusField] = useState<string | null>(null);
   const [pendingScrollElementId, setPendingScrollElementId] = useState<string | null>(null);
@@ -1386,13 +1386,6 @@ export default function Home() {
     setWhatsappTab('status');
   };
 
-  const handleGoToBotSimulation = () => {
-    window.localStorage.setItem(onboardingStorageKey, 'true');
-    setOnboardingMode('hidden');
-    setActiveSection('bot-config');
-    setBotConfigTab('simulation');
-  };
-
   const handleToggleTheme = () => {
     setTheme((current) => current === 'dark' ? 'light' : 'dark');
   };
@@ -1483,17 +1476,9 @@ export default function Home() {
               </div>
               <h1 className="mt-6 text-3xl font-semibold text-white">Sua IA está pronta.</h1>
               <p className="mx-auto mt-4 max-w-lg text-base leading-7 text-slate-400">
-                Você já pode testar a IA pelo simulador antes de conectar o WhatsApp, ou conectar agora para começar a atender clientes.
+                Conecte o WhatsApp para começar a atender seus clientes com a configuração criada.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <button
-                  type="button"
-                  onClick={handleGoToBotSimulation}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                >
-                  Testar IA agora
-                  <MessageCircle size={16} />
-                </button>
                 <button
                   type="button"
                   onClick={handleGoToWhatsAppSetup}
@@ -2394,12 +2379,12 @@ export default function Home() {
                         type="button"
                         onClick={() => {
                           setActiveSection('bot-config');
-                          setBotConfigTab('simulation');
+                          setBotConfigTab('config');
                         }}
                         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
                       >
-                        Testar IA
-                        <MessageCircle size={16} />
+                        Configurar assistente
+                        <Sparkles size={16} />
                       </button>
                     </div>
                   </div>
@@ -2443,10 +2428,7 @@ export default function Home() {
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500 sm:text-sm sm:tracking-[0.24em]">Configurar Bot</p>
                   <h1 className="mt-1 text-xl font-semibold text-white">Bot e arquivos</h1>
                 </div>
-                <div className="grid grid-cols-3 gap-1 rounded-2xl border border-slate-800 bg-slate-950/90 p-1 sm:w-auto">
-                  <button type="button" onClick={() => setBotConfigTab('simulation')} className={`min-h-10 rounded-xl px-3 py-2 text-sm font-semibold transition ${botConfigTab === 'simulation' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-900/80 hover:text-white'}`}>
-                    Simulação
-                  </button>
+                <div className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-800 bg-slate-950/90 p-1 sm:w-auto">
                   <button type="button" onClick={() => setBotConfigTab('config')} className={`min-h-10 rounded-xl px-3 py-2 text-sm font-semibold transition ${botConfigTab === 'config' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-900/80 hover:text-white'}`}>
                     Configurações
                   </button>
@@ -2472,7 +2454,6 @@ export default function Home() {
                 />
               ) : (
                 <BotConfigPanel
-                  mode={botConfigTab}
                   botConfig={botConfig}
                   focusField={botConfigFocusField}
                   onFocusFieldDone={() => setBotConfigFocusField(null)}

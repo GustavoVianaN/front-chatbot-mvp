@@ -751,7 +751,7 @@ export default function BotConfigPanel({
                 <p className="text-sm font-semibold text-white">Próximos passos recomendados</p>
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {nextRecommendedSteps.length === 0 ? (
-                    <p className="text-sm leading-6 text-emerald-200">O essencial está pronto. Agora você pode testar a IA ou ajustar opções avançadas.</p>
+                    <p className="text-sm leading-6 text-emerald-200">O essencial está pronto. Você pode revisar ou ajustar as opções avançadas.</p>
                   ) : nextRecommendedSteps.slice(0, 2).map((item) => (
                     <div key={item.label} className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3">
                       <div className="flex items-center justify-between gap-2">
