@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers';
 import type {
+  AudioTranscriptionResult,
   BotConfig,
   AuthUser,
   AutomationRule,
@@ -447,6 +448,13 @@ export async function previewKnowledgeDescriptionAudio(input: {
   return apiRequest('/knowledge-description-audio/preview', {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+}
+
+export async function transcribeAudioClip(audio: KnowledgeDescriptionAudio): Promise<AudioTranscriptionResult> {
+  return apiRequest('/audio-transcription', {
+    method: 'POST',
+    body: JSON.stringify({ audio }),
   });
 }
 

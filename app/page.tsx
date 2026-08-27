@@ -10,14 +10,16 @@ import {
   FileText,
   LayoutDashboard,
   MessageCircle,
+  Mic,
   Paperclip,
   RefreshCw,
   Settings as SettingsIcon,
   Sparkles,
+  Square,
   Trash2,
 } from 'lucide-react';
-import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
-import type { AuthUser, AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
+import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import type { AuthUser, AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeDescriptionAudio, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import MetricCard from '@/components/MetricCard';
@@ -180,6 +182,15 @@ function readFileAsDataUrl(file: File) {
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
     reader.readAsDataURL(file);
+  });
+}
+
+function readBlobAsDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Não foi possível ler o áudio.'));
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -524,6 +535,11 @@ export default function Home() {
   const [companyIntakeExampleKey, setCompanyIntakeExampleKey] = useState('');
   const [companyGuidedAnswer, setCompanyGuidedAnswer] = useState('');
   const [companyGuidedAnswers, setCompanyGuidedAnswers] = useState<Record<number, string>>({});
+  const [recordingGuidedAnswer, setRecordingGuidedAnswer] = useState(false);
+  const [transcribingGuidedAnswer, setTranscribingGuidedAnswer] = useState(false);
+  const [guidedAnswerAudioError, setGuidedAnswerAudioError] = useState('');
+  const guidedAnswerRecorderRef = useRef<MediaRecorder | null>(null);
+  const guidedAnswerChunksRef = useRef<Blob[]>([]);
   const [companyGuidedQuestionOverrides, setCompanyGuidedQuestionOverrides] = useState<Record<number, string>>({});
   const [generatingCompanyGuidedQuestion, setGeneratingCompanyGuidedQuestion] = useState(false);
   const [companyGuidedQuestionsUnlocked, setCompanyGuidedQuestionsUnlocked] = useState(false);
@@ -1281,9 +1297,9 @@ export default function Home() {
     }
   };
 
-  const handleAddCompanyGuidedAnswer = async () => {
+  const handleAddCompanyGuidedAnswer = async (answerOverride?: string) => {
     if (!currentCompanyGuidedQuestion) return;
-    const answer = companyGuidedAnswer.trim();
+    const answer = (answerOverride ?? companyGuidedAnswer).trim();
     const questionText = getCompanyGuidedQuestionText(currentCompanyGuidedQuestion);
 
     const validationError = guidedAnswerValidationError(answer);
@@ -1340,6 +1356,72 @@ export default function Home() {
     }
 
     toast('Resposta adicionada ao contexto.');
+  };
+
+  const startGuidedAnswerRecording = async () => {
+    setGuidedAnswerAudioError('');
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setGuidedAnswerAudioError('Seu navegador não permite gravação de áudio aqui.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      guidedAnswerChunksRef.current = [];
+      guidedAnswerRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) guidedAnswerChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        const mimeType = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(guidedAnswerChunksRef.current, { type: mimeType });
+        stream.getTracks().forEach((track) => track.stop());
+        guidedAnswerRecorderRef.current = null;
+        setRecordingGuidedAnswer(false);
+
+        if (blob.size === 0) return;
+
+        const audio: KnowledgeDescriptionAudio = {
+          original_filename: `resposta-bella-${Date.now()}.webm`,
+          mime_type: mimeType,
+          size_bytes: blob.size,
+          data_url: await readBlobAsDataUrl(blob),
+        };
+
+        try {
+          setTranscribingGuidedAnswer(true);
+          const { transcription } = await transcribeAudioClip(audio);
+          const text = transcription.trim();
+
+          if (!text) {
+            setGuidedAnswerAudioError('Não consegui entender o áudio. Tente falar novamente ou digite sua resposta.');
+            return;
+          }
+
+          setCompanyGuidedAnswer(text);
+          await handleAddCompanyGuidedAnswer(text);
+        } catch (error) {
+          setGuidedAnswerAudioError(error instanceof Error ? error.message : 'Não foi possível transcrever o áudio agora.');
+        } finally {
+          setTranscribingGuidedAnswer(false);
+        }
+      };
+
+      recorder.start();
+      setRecordingGuidedAnswer(true);
+    } catch {
+      setGuidedAnswerAudioError('Não foi possível acessar o microfone.');
+    }
+  };
+
+  const stopGuidedAnswerRecording = () => {
+    if (guidedAnswerRecorderRef.current?.state === 'recording') {
+      guidedAnswerRecorderRef.current.stop();
+    }
   };
 
   const onboardingStepIsValid = () => {
@@ -1831,20 +1913,56 @@ export default function Home() {
                                 value={companyGuidedAnswer}
                                 onChange={(event) => setCompanyGuidedAnswer(event.target.value)}
                                 rows={3}
-                                placeholder="Digite sua resposta para a Bella..."
-                                className="w-full resize-none border-0 bg-transparent px-1 py-1 text-sm leading-6 text-white outline-none placeholder:text-slate-500"
+                                disabled={recordingGuidedAnswer || transcribingGuidedAnswer}
+                                placeholder={
+                                  recordingGuidedAnswer
+                                    ? 'Ouvindo você...'
+                                    : transcribingGuidedAnswer
+                                      ? 'Transcrevendo sua resposta...'
+                                      : 'Digite ou grave um áudio com sua resposta para a Bella...'
+                                }
+                                className="w-full resize-none border-0 bg-transparent px-1 py-1 text-sm leading-6 text-white outline-none placeholder:text-slate-500 disabled:opacity-60"
                               />
+                              {guidedAnswerAudioError && (
+                                <p className="mt-1 text-xs leading-5 text-rose-300">{guidedAnswerAudioError}</p>
+                              )}
                               <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <p className="text-xs leading-5 text-slate-500">
-                                  Cada resposta entra automaticamente no contexto do bot.
+                                  {recordingGuidedAnswer
+                                    ? 'Gravando... toque no microfone para parar e enviar.'
+                                    : transcribingGuidedAnswer
+                                      ? 'Transcrevendo e enviando sua resposta em áudio...'
+                                      : 'Cada resposta entra automaticamente no contexto do bot. Você pode digitar ou responder por voz.'}
                                 </p>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleAddCompanyGuidedAnswer()}
-                                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                                >
-                                  Enviar
-                                </button>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => (recordingGuidedAnswer ? stopGuidedAnswerRecording() : void startGuidedAnswerRecording())}
+                                    disabled={transcribingGuidedAnswer}
+                                    aria-label={recordingGuidedAnswer ? 'Parar gravação e enviar' : 'Responder por áudio'}
+                                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                      recordingGuidedAnswer
+                                        ? 'animate-pulse border-rose-500 bg-rose-600 text-white'
+                                        : 'border-slate-700 bg-slate-900/80 text-slate-200 hover:border-emerald-500 hover:text-white'
+                                    }`}
+                                  >
+                                    {transcribingGuidedAnswer ? (
+                                      <RefreshCw size={16} className="animate-spin" />
+                                    ) : recordingGuidedAnswer ? (
+                                      <Square size={16} />
+                                    ) : (
+                                      <Mic size={16} />
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleAddCompanyGuidedAnswer()}
+                                    disabled={recordingGuidedAnswer || transcribingGuidedAnswer}
+                                    className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Enviar
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           )}

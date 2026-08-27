@@ -215,6 +215,10 @@ export type KnowledgeDescriptionAudioPreview = {
   understanding: string;
 };
 
+export type AudioTranscriptionResult = {
+  transcription: string;
+};
+
 export type KnowledgeStatus = {
   status: 'pronto' | 'processando' | 'erro';
   ready: number;

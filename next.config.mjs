@@ -31,7 +31,9 @@ const securityHeaders = [
   },
   {
     key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=(), payment=()',
+    // microphone=(self) libera a gravação de áudio usada no onboarding (Bella)
+    // e na base de conhecimento; câmera, geolocalização e pagamento continuam bloqueados.
+    value: 'camera=(), microphone=(self), geolocation=(), payment=()',
   },
 ];
 
