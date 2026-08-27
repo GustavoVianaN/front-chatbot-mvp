@@ -221,6 +221,44 @@ function wordCount(text: string) {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+function companyDescriptionValidationError(text: string): string {
+  const value = text.trim();
+  if (!value) return '';
+
+  const words = value.match(/\p{L}{2,}/gu) || [];
+  const digits = (value.match(/\d/g) || []).length;
+  const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const naturalLanguage = /\b(a|o|as|os|de|do|da|dos|das|e|em|com|para|por|que|uma|um|nosso|nossa|somos|fazemos|oferecemos|trabalhamos)\b/.test(normalized);
+
+  if (value.length < 30 || words.length < 5) {
+    return 'Explique em pelo menos uma frase o que a empresa vende, faz ou oferece.';
+  }
+
+  if (digits > value.length * 0.25 || !naturalLanguage) {
+    return 'O texto não parece descrever uma empresa. Informe produtos, serviços ou como você atende seus clientes.';
+  }
+
+  return '';
+}
+
+function guidedAnswerValidationError(text: string): string {
+  const value = text.trim();
+  const words = value.match(/\p{L}{2,}/gu) || [];
+  const digits = (value.match(/\d/g) || []).length;
+  const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const naturalLanguage = /\b(a|o|as|os|de|do|da|dos|das|e|em|com|para|por|que|quando|como|se|nao|sim|uma|um|nosso|nossa|cliente|atendente|pedido|produto|servico)\b/.test(normalized);
+
+  if (value.length < 12 || words.length < 3) {
+    return 'Responda com uma frase curta explicando como isso funciona na sua empresa.';
+  }
+
+  if (digits > value.length * 0.25 || !naturalLanguage) {
+    return 'Não consegui entender essa resposta. Escreva como você explicaria isso para uma pessoa da sua equipe.';
+  }
+
+  return '';
+}
+
 function buildAutomaticWelcomeMessage(input: { assistantName: string; companyName: string; segment: string }) {
   const assistantName = input.assistantName.trim() || 'Assistente';
   const companyName = input.companyName.trim() || 'sua empresa';
@@ -355,20 +393,22 @@ function buildCompanyReadinessChecklist({
   summary: string;
   text: string;
 }): CompanyReadinessItem[] {
-  const evidence = [text, summary, ...files.map((item) => item.content_description)]
+  const evidence = [text, ...files.map((item) => item.content_description)]
     .join('\n')
     .trim();
   const hoursMatcher = /\b(hor[aá]rio|atendimento|segunda|ter[cç]a|quarta|quinta|sexta|s[áa]bado|domingo|seg|ter|qua|qui|sex|s[áa]b|dom|24h|das\s+\d{1,2}|[aà]s\s+\d{1,2}|\d{1,2}\s?h|\d{1,2}:\d{2})\b/i;
   const productsMatcher = /\b(produto|servi[cç]o|item|cat[aá]logo|plano|pacote|assinatura|consultoria|atendimento|vendemos|vende|fabrica|produz|entrega|troca|pedido)\b/i;
-  const companyDoesReady = wordCount(evidence) >= 10;
+  const companyDoesReady = Boolean(evidence && !companyDescriptionValidationError(evidence));
+  const hasHoursEvidence = hoursMatcher.test(evidence);
+  const hasProductsEvidence = productsMatcher.test(evidence);
   const summaryCompanyName = summaryField(summary, 'Nome da empresa');
   const summarySegment = summaryField(summary, 'Segmento');
   const summaryCompanyDescription = summaryField(summary, 'O que a empresa faz');
   const summaryHours = summaryField(summary, 'Horário de atendimento');
   const summaryProducts = summaryField(summary, 'Produtos/serviços');
-  const companyDescriptionValue = summaryCompanyDescription || (companyDoesReady ? firstMatchingSentence(evidence, /.+/i) || 'Informado' : '');
-  const hoursValue = summaryHours || firstMatchingSentence(text, hoursMatcher);
-  const productsValue = summaryProducts || firstMatchingSentence(text, productsMatcher);
+  const companyDescriptionValue = companyDoesReady ? summaryCompanyDescription || firstMatchingSentence(evidence, /.+/i) || 'Informado' : '';
+  const hoursValue = hasHoursEvidence ? summaryHours || firstMatchingSentence(evidence, hoursMatcher) : '';
+  const productsValue = hasProductsEvidence ? summaryProducts || firstMatchingSentence(evidence, productsMatcher) : '';
 
   return [
     {
@@ -402,6 +442,18 @@ function buildCompanyReadinessChecklist({
       ready: Boolean(productsValue),
     }
   ];
+}
+
+function companyReadinessExample(itemId: string): string {
+  const examples: Record<string, string> = {
+    company_name: 'Minha empresa se chama Bella Cases.',
+    segment: 'Atuamos no segmento de acessórios para celulares.',
+    company_description: 'Criamos capinhas personalizadas a partir das imagens enviadas pelos clientes.',
+    hours: 'Atendemos de segunda a sexta, das 8h às 18h.',
+    products: 'Vendemos capinhas personalizadas para iPhone, Samsung e Motorola.',
+  };
+
+  return examples[itemId] || 'Descreva essa informação de forma clara e objetiva.';
 }
 
 function TypewriterText({
@@ -813,8 +865,10 @@ export default function Home() {
   }), [companyIntakeFiles, companyIntakeText]);
   const hasFreshCompanyIntakeSummary = Boolean(companyIntakeSummary.trim() && companyIntakeSummaryKey === companyIntakeAutoKey);
   const effectiveCompanyIntakeSummary = hasFreshCompanyIntakeSummary ? companyIntakeSummary : '';
+  const companyIntakeValidationError = companyDescriptionValidationError(companyIntakeText);
   const waitingForAutoCompanyIntake = onboardingStep === 3
     && Boolean(companyIntakeText.trim() || companyIntakeFiles.length > 0)
+    && !companyIntakeValidationError
     && !analyzingCompanyIntake
     && lastAnalyzedCompanyIntakeKeyRef.current !== companyIntakeAutoKey;
   const companyIntakeNeedsProcessing = onboardingStep === 3
@@ -1065,6 +1119,11 @@ export default function Home() {
     if ((!companyIntakeText.trim() && companyIntakeFiles.length === 0) || analyzingCompanyIntake) return;
     const targetKey = options?.key || companyIntakeAutoKey;
 
+    if (companyIntakeValidationError) {
+      setCompanyIntakeError(companyIntakeValidationError);
+      return;
+    }
+
     if (options?.source === 'auto' && lastAnalyzedCompanyIntakeKeyRef.current === targetKey) return;
 
     setCompanyIntakeError('');
@@ -1099,6 +1158,10 @@ export default function Home() {
   useEffect(() => {
     if (onboardingMode === 'hidden' || onboardingStep !== 3) return;
     if (!companyIntakeText.trim() && companyIntakeFiles.length === 0) return;
+    if (companyIntakeValidationError) {
+      setCompanyIntakeError(companyIntakeValidationError);
+      return;
+    }
     if (analyzingCompanyIntake) return;
     if (lastAnalyzedCompanyIntakeKeyRef.current === companyIntakeAutoKey) return;
 
@@ -1107,7 +1170,7 @@ export default function Home() {
     }, 4000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [analyzingCompanyIntake, companyIntakeAutoKey, companyIntakeFiles.length, companyIntakeText, onboardingMode, onboardingStep]);
+  }, [analyzingCompanyIntake, companyIntakeAutoKey, companyIntakeFiles.length, companyIntakeText, companyIntakeValidationError, onboardingMode, onboardingStep]);
 
   const handleSaveCompanyIntake = async () => {
     if ((!effectiveCompanyIntakeSummary.trim() && !companyIntakeText.trim() && companyIntakeFiles.length === 0 && !commercialKnowledgeText.trim() && commercialInfoFiles.length === 0) || savingCompanyIntake) return;
@@ -1223,8 +1286,9 @@ export default function Home() {
     const answer = companyGuidedAnswer.trim();
     const questionText = getCompanyGuidedQuestionText(currentCompanyGuidedQuestion);
 
-    if (answer.length < 8) {
-      toast('Responda a pergunta da Bella antes de avançar.');
+    const validationError = guidedAnswerValidationError(answer);
+    if (validationError) {
+      toast(validationError);
       return;
     }
 
@@ -1237,7 +1301,10 @@ export default function Home() {
     setCompanyIntakeText((current) => [current.trim(), answerBlock].filter(Boolean).join('\n\n'));
     setCompanyGuidedAnswer('');
 
-    if (currentCompanyGuidedQuestion.id === 1 || currentCompanyGuidedQuestion.id === 4) {
+    const nextQuestionId = currentCompanyGuidedQuestion.id + 1;
+    const hasNextQuestion = companyGuidedQuestions.some((question) => question.id === nextQuestionId);
+
+    if (hasNextQuestion) {
       setGeneratingCompanyGuidedQuestion(true);
 
       try {
@@ -1247,22 +1314,25 @@ export default function Home() {
           company_description: [effectiveCompanyIntakeSummary.trim(), companyIntakeText.trim()].filter(Boolean).join('\n\n'),
           question: questionText,
           customer_answer: answer,
-          question_count: 2,
-          mode: currentCompanyGuidedQuestion.id === 4 ? 'faq_follow_up' : 'service_flow_follow_up',
+          question_count: 1,
+          mode: nextQuestionId >= 4 ? 'faq_follow_up' : 'service_flow_follow_up',
         });
-        const generatedQuestions = (result.questions?.length ? result.questions : [result.question])
-          .map((item) => item?.trim())
-          .filter(Boolean) as string[];
+        const nextQuestion = result.question?.trim();
 
-        if (generatedQuestions.length > 0) {
-          const firstTargetId = currentCompanyGuidedQuestion.id === 4 ? 5 : 2;
+        if (nextQuestion) {
           setCompanyGuidedQuestionOverrides((current) => ({
             ...current,
-            ...(generatedQuestions[0] ? { [firstTargetId]: generatedQuestions[0] } : {}),
-            ...(generatedQuestions[1] ? { [firstTargetId + 1]: generatedQuestions[1] } : {}),
+            [nextQuestionId]: nextQuestion,
           }));
         }
       } catch {
+        const fallbackQuestion = nextQuestionId >= 4
+          ? `Sobre o que você comentou — “${answer.slice(0, 90)}” — qual dúvida do cliente a IA precisa saber responder?`
+          : `Você comentou “${answer.slice(0, 90)}”. O que a IA deve fazer em seguida nesse atendimento?`;
+        setCompanyGuidedQuestionOverrides((current) => ({
+          ...current,
+          [nextQuestionId]: fallbackQuestion,
+        }));
         toast('Não consegui gerar as próximas perguntas da Bella agora. Vou seguir com perguntas padrão.');
       } finally {
         setGeneratingCompanyGuidedQuestion(false);
@@ -1289,6 +1359,12 @@ export default function Home() {
   };
 
   const handleNextOnboardingStep = async () => {
+    if (onboardingStep === 3 && companyIntakeValidationError) {
+      setCompanyIntakeError(companyIntakeValidationError);
+      toast(companyIntakeValidationError);
+      return;
+    }
+
     if (companyIntakeNeedsProcessing) {
       toast(analyzingCompanyIntake ? 'Estou processando as informações da empresa.' : 'Aguarde a leitura da empresa antes de continuar.');
       return;
@@ -1498,12 +1574,12 @@ export default function Home() {
             </div>
           </section>
         ) : onboardingMode === 'welcome' ? (
-          <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl items-center justify-center">
+          <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-3xl items-center justify-center">
             <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/90 shadow-2xl sm:rounded-3xl">
-              <div className="grid min-h-[560px] lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                <div className="flex flex-col justify-between border-b border-slate-800 bg-slate-950 p-6 sm:p-8 lg:border-b-0 lg:border-r">
+              <div className="flex min-h-[520px] items-center justify-center bg-slate-950 p-6 sm:p-10">
+                <div className="flex w-full max-w-2xl flex-col text-center">
                   <div>
-                    <div className="flex items-start gap-4">
+                    <div className="mx-auto flex max-w-xl items-start gap-4 text-left">
                       <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/40">
                         <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
                       </div>
@@ -1516,10 +1592,10 @@ export default function Home() {
                       </div>
                     </div>
                     <p className="mt-8 text-xs uppercase tracking-[0.22em] text-emerald-300">Configuração inicial</p>
-                    <h1 className="mt-3 max-w-xl text-3xl font-semibold leading-tight text-white sm:text-4xl">
+                    <h1 className="mx-auto mt-3 max-w-xl text-3xl font-semibold leading-tight text-white sm:text-4xl">
                       Configure seu assistente de IA em menos de 2 minutos.👋
                     </h1>
-                    <p className="mt-4 max-w-lg text-base leading-7 text-slate-400">
+                    <p className="mx-auto mt-4 max-w-lg text-base leading-7 text-slate-400">
                       Ele estará pronto para responder seus clientes no WhatsApp automaticamente.
                     </p>
                   </div>
@@ -1529,32 +1605,13 @@ export default function Home() {
                       setOnboardingStep(1);
                       setOnboardingMode('wizard');
                     }}
-                    className="mt-10 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white transition hover:bg-emerald-500 sm:w-auto"
+                    className="mx-auto mt-10 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white transition hover:bg-emerald-500 sm:max-w-sm"
                   >
                     Começar
                     <ArrowRight size={20} />
                   </button>
                 </div>
 
-                <div className="flex flex-col justify-center gap-4 p-6 sm:p-8">
-                  {[
-                    ['01', 'Empresa', 'Nome, segmento e contexto básico.'],
-                    ['02', 'Assistente', 'Escolha como a IA vai se apresentar.'],
-                    ['03', 'Conhecimento', 'Ensine sua IA sobre a empresa.'],
-                    ['04', 'Atendimento', 'Defina estilo e tamanho das respostas.'],
-                    ['05', 'Pronto', 'Revise e entre no painel.'],
-                  ].map(([number, title, description]) => (
-                    <div key={number} className="flex gap-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-emerald-300">
-                        {number}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-white">{title}</p>
-                        <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </section>
@@ -2182,9 +2239,14 @@ export default function Home() {
                       ))}
                     </div>
 
-                    <p className="mt-4 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs leading-5 text-slate-400">
-                      Exemplo: “Atendemos de segunda a sexta, das 8h às 18h.”
-                    </p>
+                    <div className="mt-4 space-y-2">
+                      {missingCompanyReadinessItems.map((item) => (
+                        <p key={`example-${item.id}`} className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs leading-5 text-slate-400">
+                          <span className="font-semibold text-slate-300">Exemplo para {item.label}:</span>{' '}
+                          “{companyReadinessExample(item.id)}”
+                        </p>
+                      ))}
+                    </div>
 
                     <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                       <button
