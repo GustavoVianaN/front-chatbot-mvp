@@ -274,6 +274,13 @@ export async function generateCompanyIntakeExample(data: { company_name: string;
   });
 }
 
+export async function generateCompanyIntakeOpeningQuestion(data: { company_name: string; segment: string }): Promise<{ question: string }> {
+  return apiRequest('/dashboard/company-intake/opening-question', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function generateCompanyIntakeFollowUpQuestion(data: {
   company_name: string;
   company_segment: string;

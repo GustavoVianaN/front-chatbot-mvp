@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import {
-  AlertCircle,
   ArrowRight,
   Building2,
   CheckCircle2,
@@ -18,7 +17,7 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, generateCompanyIntakeOpeningQuestion, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
 import type { AuthUser, AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeDescriptionAudio, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
@@ -65,6 +64,7 @@ type CompanyReadinessItem = {
 type CompanyGuidedQuestion = {
   id: number;
   question: string;
+  topic?: string;
 };
 
 // Tipagem mínima da Web Speech API (não incluída nos libs padrão do TS).
@@ -172,16 +172,22 @@ const onboardingBellaGuideMessages: Record<number, { title: string; body: string
     body: 'Confira se o nome, o tom e o conhecimento ficaram certos. Se algo não estiver bom, você ainda pode voltar e ajustar.',
   },
 };
-const minimumCompanyGuidedAnswers = 4;
-// Antes existia uma lista fixa de 6 perguntas com tópicos pré-definidos
-// (parecia questionário/entrevista). Agora só a primeira pergunta é fixa —
-// as próximas nascem da própria conversa, uma de cada vez, então isso vira
-// o estado inicial de uma lista que cresce dinamicamente.
-const maxCompanyGuidedQuestions = 6;
+// Fase 1 (papo livre): 1 pergunta de abertura (gerada a partir do segmento)
+// + 4 perguntas seguintes, cada uma reagindo com um comentário humano à
+// resposta anterior. Só depois de esgotada essa fase é que entra a fase 2
+// (perguntas fechadas para os itens essenciais que ainda faltarem, tipo
+// horário de atendimento ou produtos).
+const freeFlowGuidedQuestionCap = 5;
+const minimumCompanyGuidedAnswers = freeFlowGuidedQuestionCap;
+// A pergunta 1 começa com um texto genérico e é substituída pela versão
+// gerada a partir do segmento assim que a chamada à IA responde (ver efeito
+// de busca da pergunta de abertura). Isso evita a tela em branco enquanto
+// carrega.
 const initialCompanyGuidedQuestions: CompanyGuidedQuestion[] = [
   {
     id: 1,
-    question: 'Como funciona o atendimento, desde o primeiro contato até a venda ou serviço ser finalizado?',
+    topic: 'company_description',
+    question: 'Para começar, me conta: o que sua empresa faz?',
   },
 ];
 
@@ -499,16 +505,17 @@ function buildCompanyReadinessChecklist({
   ];
 }
 
-function companyReadinessExample(itemId: string): string {
-  const examples: Record<string, string> = {
-    company_name: 'Minha empresa se chama Bella Cases.',
-    segment: 'Atuamos no segmento de acessórios para celulares.',
-    company_description: 'Criamos capinhas personalizadas a partir das imagens enviadas pelos clientes.',
-    hours: 'Atendemos de segunda a sexta, das 8h às 18h.',
-    products: 'Vendemos capinhas personalizadas para iPhone, Samsung e Motorola.',
+function companyReadinessQuestion(item: CompanyReadinessItem, companyName: string): string {
+  const name = companyName.trim() || 'sua empresa';
+  const questions: Record<string, string> = {
+    company_name: 'Antes de continuarmos, qual é o nome da sua empresa?',
+    segment: `Para eu entender melhor a ${name}, em qual segmento vocês trabalham?`,
+    company_description: `Você pode me explicar com um pouco mais de detalhe o que a ${name} faz para os clientes?`,
+    hours: `E em quais dias e horários a ${name} costuma atender os clientes?`,
+    products: `Você comentou sobre a empresa. Quais são os principais produtos ou serviços que os clientes podem pedir?`,
   };
 
-  return examples[itemId] || 'Descreva essa informação de forma clara e objetiva.';
+  return questions[item.id] || `Tem mais algum detalhe sobre ${item.label.toLowerCase()} que seja importante eu saber?`;
 }
 
 function TypewriterText({
@@ -574,6 +581,16 @@ export default function Home() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pending, setPending] = useState(false);
   const [companyIntakeText, setCompanyIntakeText] = useState('');
+  const [recordingCompanyIntakeAudio, setRecordingCompanyIntakeAudio] = useState(false);
+  const [transcribingCompanyIntakeAudio, setTranscribingCompanyIntakeAudio] = useState(false);
+  const [companyIntakeAudioError, setCompanyIntakeAudioError] = useState('');
+  const [companyIntakeAudioLiveMode, setCompanyIntakeAudioLiveMode] = useState(false);
+  const companyIntakeRecorderRef = useRef<MediaRecorder | null>(null);
+  const companyIntakeAudioChunksRef = useRef<Blob[]>([]);
+  const companyIntakeAudioStreamRef = useRef<MediaStream | null>(null);
+  const companyIntakeRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const companyIntakeLiveBaseTextRef = useRef('');
+  const companyIntakeFinalTranscriptRef = useRef('');
   const [companyIntakeExample, setCompanyIntakeExample] = useState(defaultCompanyIntakeExample);
   const [generatingCompanyIntakeExample, setGeneratingCompanyIntakeExample] = useState(false);
   const [companyIntakeExampleKey, setCompanyIntakeExampleKey] = useState('');
@@ -584,11 +601,22 @@ export default function Home() {
   const [guidedAnswerAudioError, setGuidedAnswerAudioError] = useState('');
   const [guidedAnswerLiveMode, setGuidedAnswerLiveMode] = useState(false);
   const [guidedAnswerHandsFree, setGuidedAnswerHandsFree] = useState(false);
+  const [realtimeVoiceStatus, setRealtimeVoiceStatus] = useState<'idle' | 'connecting' | 'listening' | 'processing' | 'speaking' | 'error'>('idle');
   const guidedAnswerRecorderRef = useRef<MediaRecorder | null>(null);
   const guidedAnswerChunksRef = useRef<Blob[]>([]);
   const guidedAnswerRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const guidedAnswerFinalTranscriptRef = useRef('');
   const guidedAnswerSilenceTimerRef = useRef<number | null>(null);
+  const realtimePeerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const realtimeDataChannelRef = useRef<RTCDataChannel | null>(null);
+  const realtimeMicrophoneStreamRef = useRef<MediaStream | null>(null);
+  const realtimeRemoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const realtimeNegotiatingRef = useRef(false);
+  const realtimeListenTimerRef = useRef<number | null>(null);
+  const realtimeTranscriptionTimerRef = useRef<number | null>(null);
+  const realtimeSpokenQuestionIdRef = useRef<number | null>(null);
+  const currentCompanyGuidedQuestionRef = useRef<CompanyGuidedQuestion | null>(null);
+  const guidedAnswerSubmitRef = useRef<(answer: string) => Promise<void>>(async () => undefined);
 
   const clearGuidedAnswerSilenceTimer = () => {
     if (guidedAnswerSilenceTimerRef.current !== null) {
@@ -597,6 +625,8 @@ export default function Home() {
     }
   };
   const [companyGuidedQuestions, setCompanyGuidedQuestions] = useState<CompanyGuidedQuestion[]>(initialCompanyGuidedQuestions);
+  const [generatingCompanyGuidedOpening, setGeneratingCompanyGuidedOpening] = useState(false);
+  const companyGuidedOpeningFetchedRef = useRef(false);
   const [companyGuidedClarifications, setCompanyGuidedClarifications] = useState<Record<number, { userText: string; bellaText: string }[]>>({});
   const [generatingCompanyGuidedClarification, setGeneratingCompanyGuidedClarification] = useState(false);
   const [generatingCompanyGuidedQuestion, setGeneratingCompanyGuidedQuestion] = useState(false);
@@ -604,7 +634,6 @@ export default function Home() {
   const [companyGuidedLearningSummary, setCompanyGuidedLearningSummary] = useState('');
   const [companyGuidedLearningSummaryKey, setCompanyGuidedLearningSummaryKey] = useState('');
   const [generatingCompanyGuidedLearningSummary, setGeneratingCompanyGuidedLearningSummary] = useState(false);
-  const [companyReadinessWarningOpen, setCompanyReadinessWarningOpen] = useState(false);
   const [companyIntakeFiles, setCompanyIntakeFiles] = useState<CompanyIntakeDraftFile[]>([]);
   const [commercialInfoChoice, setCommercialInfoChoice] = useState<'idle' | 'yes' | 'no'>('idle');
   const [commercialInfoText, setCommercialInfoText] = useState('');
@@ -967,6 +996,13 @@ export default function Home() {
     .map((question) => question.id)), [companyGuidedAnswers, companyIntakeText, companyGuidedQuestions]);
   const answeredCompanyGuidedCount = answeredCompanyGuidedQuestionIds.size;
   const currentCompanyGuidedQuestion = companyGuidedQuestions.find((question) => !answeredCompanyGuidedQuestionIds.has(question.id)) || null;
+  // Fase 1 (papo livre) completa: a pergunta de número freeFlowGuidedQuestionCap
+  // já foi gerada e todas as perguntas até ela já têm resposta. Só a partir
+  // daqui a fase 2 (itens essenciais que faltarem) pode começar.
+  const companyGuidedFreeFlowComplete = companyGuidedQuestions.some((question) => question.id === freeFlowGuidedQuestionCap)
+    && companyGuidedQuestions
+      .filter((question) => question.id <= freeFlowGuidedQuestionCap)
+      .every((question) => answeredCompanyGuidedQuestionIds.has(question.id));
   const getCompanyGuidedQuestionText = (question: CompanyGuidedQuestion) => question.question;
   const companyGuidedConversation = companyGuidedQuestions
     .filter((question) => answeredCompanyGuidedQuestionIds.has(question.id))
@@ -990,10 +1026,12 @@ export default function Home() {
   const companyReadinessComplete = companyReadinessItems
     .filter((item) => item.id !== 'files')
     .every((item) => item.ready);
-  const canUnlockCompanyGuidedQuestions = companyReadinessVisible && companyReadinessComplete;
-  const canShowCompanyGuidedQuestions = companyGuidedQuestionsUnlocked || canUnlockCompanyGuidedQuestions;
+  const canUnlockCompanyGuidedQuestions = companyReadinessVisible;
+  const canShowCompanyGuidedQuestions = onboardingStep === 3 || companyGuidedQuestionsUnlocked || canUnlockCompanyGuidedQuestions;
   const showOnboardingHeaderBella = onboardingStep !== 3;
-  const hideCompanyReadinessResult = canShowCompanyGuidedQuestions && companyReadinessComplete;
+  // "Terminou o papo com a Bella": não há mais pergunta pendente nem pergunta
+  // sendo gerada. Só a partir daqui liberamos anexar arquivos e continuar.
+  const companyGuidedChatFinished = canShowCompanyGuidedQuestions && !currentCompanyGuidedQuestion && !generatingCompanyGuidedQuestion;
 
   useEffect(() => {
     if (canUnlockCompanyGuidedQuestions) {
@@ -1001,11 +1039,80 @@ export default function Home() {
     }
   }, [canUnlockCompanyGuidedQuestions]);
 
+  // A pergunta 1 não é mais fixa e genérica para todo mundo: assim que o
+  // segmento (Passo 1) estiver disponível e a pessoa ainda não tiver
+  // respondido a abertura, busca uma pergunta específica para o segmento e
+  // substitui o placeholder inicial.
   useEffect(() => {
-    if (companyReadinessWarningOpen && missingCompanyReadinessItems.length === 0) {
-      setCompanyReadinessWarningOpen(false);
+    if (companyGuidedOpeningFetchedRef.current) return;
+    if (!canShowCompanyGuidedQuestions) return;
+    if (answeredCompanyGuidedQuestionIds.has(1)) return;
+
+    const companyName = onboardingDraft.company_name.trim();
+    const segment = onboardingDraft.segment.trim();
+
+    if (!companyName || !segment) return;
+
+    companyGuidedOpeningFetchedRef.current = true;
+    setGeneratingCompanyGuidedOpening(true);
+
+    generateCompanyIntakeOpeningQuestion({ company_name: companyName, segment })
+      .then((result) => {
+        const question = result.question?.trim();
+        if (!question) return;
+
+        setCompanyGuidedQuestions((current) => current.map((item) => (
+          item.id === 1 ? { ...item, question } : item
+        )));
+      })
+      .catch(() => undefined)
+      .finally(() => setGeneratingCompanyGuidedOpening(false));
+  }, [canShowCompanyGuidedQuestions, answeredCompanyGuidedQuestionIds, onboardingDraft.company_name, onboardingDraft.segment]);
+
+  // Fase 2: só depois que o papo livre (abertura + 4 perguntas) terminar é
+  // que perguntamos diretamente sobre o que ainda estiver faltando (horário
+  // de atendimento, produtos etc.) — não misturado com o papo livre.
+  useEffect(() => {
+    if (!companyReadinessVisible || !companyGuidedFreeFlowComplete || missingCompanyReadinessItems.length === 0) return;
+
+    setCompanyGuidedQuestions((current) => {
+      const missingWithoutQueuedQuestion = missingCompanyReadinessItems
+        .filter((item) => !current.some((question) => question.topic === item.id));
+
+      if (missingWithoutQueuedQuestion.length === 0) return current;
+
+      let nextId = Math.max(0, ...current.map((question) => question.id)) + 1;
+      const additionalQuestions = missingWithoutQueuedQuestion.map((item) => ({
+        id: nextId++,
+        topic: item.id,
+        question: companyReadinessQuestion(item, onboardingDraft.company_name),
+      }));
+
+      return [...current, ...additionalQuestions];
+    });
+  }, [companyReadinessVisible, companyGuidedFreeFlowComplete, missingCompanyReadinessItems, onboardingDraft.company_name]);
+
+  useEffect(() => () => {
+    const recorder = companyIntakeRecorderRef.current;
+
+    if (recorder) {
+      recorder.ondataavailable = null;
+      recorder.onstop = null;
+      if (recorder.state !== 'inactive') recorder.stop();
     }
-  }, [companyReadinessWarningOpen, missingCompanyReadinessItems.length]);
+
+    companyIntakeAudioStreamRef.current?.getTracks().forEach((track) => track.stop());
+
+    const recognition = companyIntakeRecognitionRef.current;
+
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      recognition.abort();
+      companyIntakeRecognitionRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!canShowCompanyGuidedQuestions) return;
@@ -1420,7 +1527,9 @@ export default function Home() {
     // Não existe mais uma lista fixa de tópicos: a próxima pergunta é sempre
     // gerada com base no que a pessoa acabou de contar, até um limite
     // razoável de trocas — como uma conversa de verdade, não um roteiro.
-    if (nextQuestionId <= maxCompanyGuidedQuestions) {
+    const nextQuestionAlreadyQueued = companyGuidedQuestions.some((question) => question.id === nextQuestionId);
+
+    if (nextQuestionId <= freeFlowGuidedQuestionCap && !nextQuestionAlreadyQueued) {
       setGeneratingCompanyGuidedQuestion(true);
 
       try {
@@ -1445,6 +1554,270 @@ export default function Home() {
     }
 
     toast('Resposta adicionada ao contexto.');
+  };
+
+  guidedAnswerSubmitRef.current = async (answer: string) => {
+    await handleAddCompanyGuidedAnswer(answer);
+  };
+  currentCompanyGuidedQuestionRef.current = currentCompanyGuidedQuestion;
+
+  const realtimeVoiceActive = realtimeVoiceStatus === 'connecting'
+    || realtimeVoiceStatus === 'listening'
+    || realtimeVoiceStatus === 'processing'
+    || realtimeVoiceStatus === 'speaking';
+
+  const sendRealtimeEvent = (event: Record<string, unknown>) => {
+    const channel = realtimeDataChannelRef.current;
+    if (channel?.readyState === 'open') channel.send(JSON.stringify(event));
+  };
+
+  const speakRealtimeQuestion = (question: CompanyGuidedQuestion | null) => {
+    if (!question || realtimeSpokenQuestionIdRef.current === question.id) return;
+    if (realtimeDataChannelRef.current?.readyState !== 'open') return;
+
+    realtimeSpokenQuestionIdRef.current = question.id;
+    realtimeMicrophoneStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = false;
+    });
+    setRealtimeVoiceStatus('speaking');
+    sendRealtimeEvent({
+      type: 'response.create',
+      response: {
+        output_modalities: ['audio'],
+        instructions: [
+          'Fale em português do Brasil, com voz acolhedora, natural e profissional.',
+          'Diga somente a pergunta abaixo, sem introdução, explicação ou texto adicional.',
+          question.question,
+        ].join('\n'),
+      },
+    });
+  };
+
+  const stopRealtimeVoice = () => {
+    realtimeNegotiatingRef.current = false;
+    if (realtimeListenTimerRef.current !== null) {
+      window.clearTimeout(realtimeListenTimerRef.current);
+      realtimeListenTimerRef.current = null;
+    }
+    if (realtimeTranscriptionTimerRef.current !== null) {
+      window.clearTimeout(realtimeTranscriptionTimerRef.current);
+      realtimeTranscriptionTimerRef.current = null;
+    }
+    realtimeDataChannelRef.current?.close();
+    realtimePeerConnectionRef.current?.close();
+    realtimeMicrophoneStreamRef.current?.getTracks().forEach((track) => track.stop());
+    const remoteAudio = realtimeRemoteAudioRef.current;
+    if (remoteAudio) {
+      remoteAudio.pause();
+      remoteAudio.srcObject = null;
+    }
+    realtimeDataChannelRef.current = null;
+    realtimePeerConnectionRef.current = null;
+    realtimeMicrophoneStreamRef.current = null;
+    realtimeRemoteAudioRef.current = null;
+    realtimeSpokenQuestionIdRef.current = null;
+    setRealtimeVoiceStatus('idle');
+  };
+
+  const startRealtimeVoice = async () => {
+    if (realtimeVoiceActive) return;
+    setGuidedAnswerAudioError('');
+    setRealtimeVoiceStatus('connecting');
+    realtimeNegotiatingRef.current = true;
+
+    try {
+      if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === 'undefined') {
+        throw new Error('Seu navegador não oferece suporte à conversa de voz em tempo real.');
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      const peerConnection = new RTCPeerConnection();
+      const remoteAudio = new Audio();
+      remoteAudio.autoplay = true;
+      remoteAudio.setAttribute('playsinline', 'true');
+      peerConnection.ontrack = (event) => {
+        remoteAudio.srcObject = event.streams[0];
+        void remoteAudio.play().catch(() => undefined);
+      };
+      stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+
+      const dataChannel = peerConnection.createDataChannel('oai-events');
+      realtimePeerConnectionRef.current = peerConnection;
+      realtimeDataChannelRef.current = dataChannel;
+      realtimeMicrophoneStreamRef.current = stream;
+      realtimeRemoteAudioRef.current = remoteAudio;
+
+      dataChannel.onopen = () => {
+        sendRealtimeEvent({
+          type: 'session.update',
+          session: {
+            type: 'realtime',
+            instructions: 'Você é a Bella. Fale sempre em português do Brasil e siga exatamente as perguntas enviadas pelo sistema.',
+            output_modalities: ['audio'],
+            audio: {
+              input: {
+                transcription: { model: 'gpt-4o-mini-transcribe', language: 'pt' },
+                noise_reduction: { type: 'far_field' },
+                turn_detection: {
+                  type: 'server_vad',
+                  threshold: 0.65,
+                  prefix_padding_ms: 300,
+                  silence_duration_ms: 700,
+                  create_response: false,
+                  interrupt_response: true,
+                },
+              },
+              output: { voice: 'marin' },
+            },
+          },
+        });
+        setRealtimeVoiceStatus('listening');
+        window.setTimeout(() => speakRealtimeQuestion(currentCompanyGuidedQuestionRef.current), 100);
+      };
+
+      dataChannel.onmessage = (event) => {
+        let message: { type?: string; transcript?: string; error?: { message?: string } };
+        try {
+          message = JSON.parse(String(event.data));
+        } catch {
+          return;
+        }
+
+        const releaseMicrophoneAfterBella = () => {
+          if (realtimeListenTimerRef.current !== null) window.clearTimeout(realtimeListenTimerRef.current);
+          realtimeListenTimerRef.current = window.setTimeout(() => {
+            realtimeMicrophoneStreamRef.current?.getAudioTracks().forEach((track) => {
+              track.enabled = true;
+            });
+            setRealtimeVoiceStatus('listening');
+            realtimeListenTimerRef.current = null;
+          }, 250);
+        };
+
+        if (message.type === 'input_audio_buffer.speech_started') {
+          if (realtimeTranscriptionTimerRef.current !== null) {
+            window.clearTimeout(realtimeTranscriptionTimerRef.current);
+            realtimeTranscriptionTimerRef.current = null;
+          }
+          setRealtimeVoiceStatus('listening');
+        } else if (message.type === 'input_audio_buffer.speech_stopped') {
+          realtimeMicrophoneStreamRef.current?.getAudioTracks().forEach((track) => {
+            track.enabled = false;
+          });
+          setRealtimeVoiceStatus('processing');
+          realtimeTranscriptionTimerRef.current = window.setTimeout(() => {
+            realtimeMicrophoneStreamRef.current?.getAudioTracks().forEach((track) => {
+              track.enabled = true;
+            });
+            setGuidedAnswerAudioError('Não consegui concluir essa resposta. Pode falar novamente.');
+            setRealtimeVoiceStatus('listening');
+            realtimeTranscriptionTimerRef.current = null;
+          }, 12_000);
+        } else if (message.type === 'response.audio.delta' || message.type === 'response.output_audio.delta' || message.type === 'output_audio_buffer.started') {
+          setRealtimeVoiceStatus('speaking');
+        } else if (message.type === 'output_audio_buffer.stopped') {
+          // Esse evento (específico de WebRTC/SIP) é o sinal correto de que o
+          // áudio da Bella REALMENTE terminou de tocar no navegador. Os
+          // eventos "response.audio.done"/"response.output_audio.done"
+          // indicam apenas que o servidor terminou de GERAR o áudio — o
+          // player ainda pode estar com alguns instantes de fala em buffer,
+          // e liberar o microfone nesse momento cortava a Bella no meio da
+          // frase.
+          releaseMicrophoneAfterBella();
+        } else if (message.type === 'response.done') {
+          // Fallback para quando o evento output_audio_buffer.stopped não
+          // chega (ex: resposta sem áudio). Se ele já chegou, o timer abaixo
+          // é ignorado.
+          if (realtimeListenTimerRef.current === null) {
+            realtimeListenTimerRef.current = window.setTimeout(() => {
+              realtimeMicrophoneStreamRef.current?.getAudioTracks().forEach((track) => {
+                track.enabled = true;
+              });
+              setRealtimeVoiceStatus('listening');
+              realtimeListenTimerRef.current = null;
+            }, 700);
+          }
+        } else if (message.type === 'conversation.item.input_audio_transcription.completed') {
+          if (realtimeTranscriptionTimerRef.current !== null) {
+            window.clearTimeout(realtimeTranscriptionTimerRef.current);
+            realtimeTranscriptionTimerRef.current = null;
+          }
+          const transcript = message.transcript?.trim() || '';
+          if (transcript) {
+            setCompanyGuidedAnswer(transcript);
+            void guidedAnswerSubmitRef.current(transcript);
+          } else {
+            realtimeMicrophoneStreamRef.current?.getAudioTracks().forEach((track) => {
+              track.enabled = true;
+            });
+            setRealtimeVoiceStatus('listening');
+          }
+        } else if (message.type === 'conversation.item.input_audio_transcription.failed') {
+          if (realtimeTranscriptionTimerRef.current !== null) {
+            window.clearTimeout(realtimeTranscriptionTimerRef.current);
+            realtimeTranscriptionTimerRef.current = null;
+          }
+          realtimeMicrophoneStreamRef.current?.getAudioTracks().forEach((track) => {
+            track.enabled = true;
+          });
+          setGuidedAnswerAudioError('Não consegui entender essa resposta. Pode falar novamente.');
+          setRealtimeVoiceStatus('listening');
+        } else if (message.type === 'error') {
+          console.error('[Bella Realtime] A sessão retornou um erro.', message.error);
+          setGuidedAnswerAudioError('A conversa por voz foi interrompida. Tente ligar o microfone novamente.');
+          stopRealtimeVoice();
+          setRealtimeVoiceStatus('error');
+        }
+      };
+
+      dataChannel.onerror = () => {
+        setGuidedAnswerAudioError('A conexão de voz foi interrompida. Você pode continuar por texto.');
+        stopRealtimeVoice();
+        setRealtimeVoiceStatus('error');
+      };
+      peerConnection.onconnectionstatechange = () => {
+        if (!realtimeNegotiatingRef.current && peerConnection.connectionState === 'failed') {
+          setGuidedAnswerAudioError('A conexão de voz foi interrompida. Você pode tentar novamente.');
+          stopRealtimeVoice();
+        }
+      };
+
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      const localSdp = peerConnection.localDescription?.sdp?.trim() || '';
+      if (!localSdp) {
+        throw new Error('O navegador não conseguiu gerar a oferta de áudio WebRTC.');
+      }
+      const response = await fetch('/api/realtime/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sdp: localSdp }),
+      });
+      const payload = await response.json() as { sdp?: string; error?: string };
+      if (!response.ok || !payload.sdp) {
+        throw new Error('Não foi possível iniciar a conversa por voz agora.');
+      }
+
+      if (peerConnection.signalingState === 'closed') {
+        throw new Error('A conexão de voz foi encerrada antes de ficar pronta.');
+      }
+      await peerConnection.setRemoteDescription({ type: 'answer', sdp: payload.sdp });
+      realtimeNegotiatingRef.current = false;
+    } catch (error) {
+      console.error('[Bella Realtime] Falha ao iniciar a sessão de voz.', error);
+      stopRealtimeVoice();
+      setRealtimeVoiceStatus('error');
+      const permissionDenied = error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError');
+      setGuidedAnswerAudioError(permissionDenied
+        ? 'Permita o acesso ao microfone no navegador para conversar com a Bella por voz.'
+        : 'Não foi possível iniciar a conversa por voz agora. Tente novamente ou continue digitando.');
+    }
   };
 
   // Fallback para navegadores sem Web Speech API: grava o áudio inteiro e
@@ -1512,6 +1885,166 @@ export default function Home() {
       setGuidedAnswerAudioError('Não foi possível acessar o microfone.');
       setGuidedAnswerHandsFree(false);
     }
+  };
+
+  // Fallback para navegadores sem Web Speech API: grava o áudio inteiro e só
+  // transcreve (Whisper) depois de parar — sem texto aparecendo ao vivo.
+  const startCompanyIntakeAudioFallback = async () => {
+    setCompanyIntakeAudioError('');
+    setCompanyIntakeAudioLiveMode(false);
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setCompanyIntakeAudioError('Seu navegador não permite gravar áudio aqui. Você ainda pode digitar sua resposta.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredMimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
+
+      companyIntakeAudioChunksRef.current = [];
+      companyIntakeAudioStreamRef.current = stream;
+      companyIntakeRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) companyIntakeAudioChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        const mimeType = recorder.mimeType || preferredMimeType || 'audio/webm';
+        const blob = new Blob(companyIntakeAudioChunksRef.current, { type: mimeType });
+        stream.getTracks().forEach((track) => track.stop());
+        companyIntakeAudioStreamRef.current = null;
+        companyIntakeRecorderRef.current = null;
+        setRecordingCompanyIntakeAudio(false);
+
+        if (blob.size === 0) {
+          setCompanyIntakeAudioError('Nenhum áudio foi capturado. Tente novamente.');
+          return;
+        }
+
+        if (blob.size > 10 * 1024 * 1024) {
+          setCompanyIntakeAudioError('O áudio deve ter no máximo 10 MB. Grave uma resposta mais curta.');
+          return;
+        }
+
+        const extension = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+        const audio: KnowledgeDescriptionAudio = {
+          original_filename: `empresa-${Date.now()}.${extension}`,
+          mime_type: mimeType,
+          size_bytes: blob.size,
+          data_url: await readBlobAsDataUrl(blob),
+        };
+
+        try {
+          setTranscribingCompanyIntakeAudio(true);
+          const { transcription } = await transcribeAudioClip(audio);
+          const text = transcription.trim();
+
+          if (!text) {
+            setCompanyIntakeAudioError('Não consegui entender o áudio. Tente falar novamente ou digite sua resposta.');
+            return;
+          }
+
+          setCompanyIntakeText((current) => [current.trim(), text].filter(Boolean).join('\n\n'));
+          toast('Áudio transcrito e adicionado ao texto.');
+        } catch (error) {
+          setCompanyIntakeAudioError(error instanceof Error ? error.message : 'Não foi possível transcrever o áudio agora.');
+        } finally {
+          setTranscribingCompanyIntakeAudio(false);
+        }
+      };
+
+      recorder.start();
+      setRecordingCompanyIntakeAudio(true);
+    } catch {
+      setCompanyIntakeAudioError('Não foi possível acessar o microfone. Verifique a permissão do navegador.');
+    }
+  };
+
+  const stopCompanyIntakeAudioFallback = () => {
+    if (companyIntakeRecorderRef.current?.state === 'recording') {
+      companyIntakeRecorderRef.current.stop();
+    }
+  };
+
+  // Caminho principal: reconhecimento de voz ao vivo, igual à conversa com a
+  // Bella — o texto vai surgindo no campo enquanto você fala, sem precisar
+  // esperar gravar tudo e transcrever depois.
+  const startCompanyIntakeAudio = () => {
+    setCompanyIntakeAudioError('');
+    const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
+
+    if (!SpeechRecognitionCtor) {
+      void startCompanyIntakeAudioFallback();
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    companyIntakeFinalTranscriptRef.current = '';
+    companyIntakeLiveBaseTextRef.current = companyIntakeText.trim();
+    companyIntakeRecognitionRef.current = recognition;
+
+    recognition.onresult = (event) => {
+      let interim = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const text = result[0]?.transcript || '';
+
+        if (result.isFinal) {
+          companyIntakeFinalTranscriptRef.current = [companyIntakeFinalTranscriptRef.current, text.trim()].filter(Boolean).join(' ');
+        } else {
+          interim += text;
+        }
+      }
+
+      const spoken = [companyIntakeFinalTranscriptRef.current, interim].filter(Boolean).join(' ');
+      setCompanyIntakeText([companyIntakeLiveBaseTextRef.current, spoken].filter(Boolean).join(' '));
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === 'no-speech' || event.error === 'aborted') return;
+
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setCompanyIntakeAudioError('Não foi possível acessar o microfone. Verifique a permissão do navegador.');
+      } else if (event.error === 'network') {
+        setCompanyIntakeAudioError('Sem conexão para o reconhecimento de voz agora. Tente novamente.');
+      } else {
+        setCompanyIntakeAudioError('Não consegui ouvir com clareza. Tente novamente ou digite sua resposta.');
+      }
+    };
+
+    recognition.onend = () => {
+      setRecordingCompanyIntakeAudio(false);
+      companyIntakeRecognitionRef.current = null;
+      companyIntakeFinalTranscriptRef.current = '';
+    };
+
+    try {
+      recognition.start();
+      setCompanyIntakeAudioLiveMode(true);
+      setRecordingCompanyIntakeAudio(true);
+    } catch {
+      companyIntakeRecognitionRef.current = null;
+      setCompanyIntakeAudioError('Não foi possível iniciar o reconhecimento de voz.');
+    }
+  };
+
+  const stopCompanyIntakeAudio = () => {
+    if (companyIntakeRecognitionRef.current) {
+      companyIntakeRecognitionRef.current.stop();
+      return;
+    }
+
+    stopCompanyIntakeAudioFallback();
   };
 
   const stopGuidedAnswerAudioFallback = () => {
@@ -1652,6 +2185,15 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [guidedAnswerHandsFree, recordingGuidedAnswer, transcribingGuidedAnswer, generatingCompanyGuidedQuestion, generatingCompanyGuidedClarification, currentCompanyGuidedQuestion?.id]);
 
+  useEffect(() => {
+    if (!realtimeVoiceActive || realtimeVoiceStatus === 'connecting') return;
+    // Entre o envio de uma resposta e a geração da próxima pergunta existe
+    // um render em que currentCompanyGuidedQuestion fica nulo. Isso é uma
+    // transição da conversa, não o fim da sessão: mantenha o WebRTC aberto.
+    if (!currentCompanyGuidedQuestion) return;
+    speakRealtimeQuestion(currentCompanyGuidedQuestion);
+  }, [currentCompanyGuidedQuestion?.id, realtimeVoiceActive, realtimeVoiceStatus]);
+
   // Ao sair do passo 3 (ou do wizard), desliga o microfone por completo em
   // vez de deixá-lo escutando em segundo plano.
   useEffect(() => {
@@ -1671,6 +2213,7 @@ export default function Home() {
     }
 
     stopGuidedAnswerAudioFallback();
+    stopRealtimeVoice();
   }, [onboardingStep, onboardingMode]);
 
   const onboardingStepIsValid = () => {
@@ -1683,7 +2226,7 @@ export default function Home() {
     }
 
     if (onboardingStep === 3) {
-      return canShowCompanyGuidedQuestions && companyGuidedMinimumComplete && companyReadinessComplete;
+      return canShowCompanyGuidedQuestions && companyGuidedMinimumComplete;
     }
 
     return true;
@@ -1701,19 +2244,9 @@ export default function Home() {
       return;
     }
 
-    if (onboardingStep === 3 && missingCompanyReadinessItems.length > 0) {
-      setCompanyReadinessWarningOpen(true);
-      toast('Falta completar algumas informações antes de continuar.');
-      return;
-    }
-
     if (!onboardingStepIsValid()) {
-      toast(onboardingStep === 3 ? 'Responda pelo menos 2 perguntas da Bella e complete os itens marcados como Não.' : 'Preencha os campos principais para continuar.');
+      toast(onboardingStep === 3 ? 'Converse mais um pouco com a Bella para ela concluir o contexto da empresa.' : 'Preencha os campos principais para continuar.');
       return;
-    }
-
-    if (onboardingStep === 1) {
-      await refreshCompanyIntakeExample();
     }
 
     setOnboardingStep((current) => Math.min(onboardingTotalSteps, current + 1));
@@ -1989,7 +2522,7 @@ export default function Home() {
                       <p className="mt-2 text-sm leading-6 text-slate-400">Esse será o nome que aparecerá para seus clientes.</p>
                     )}
                     {onboardingStep === 3 && (
-                      <p className="mt-2 text-sm leading-6 text-slate-400">Quanto mais contexto você fornecer, melhores serão as respostas.</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">Converse com a Bella por texto ou áudio. Ela vai organizar as informações para você.</p>
                     )}
                   </div>
                   <div className="min-w-[180px]">
@@ -2050,18 +2583,8 @@ export default function Home() {
                 )}
 
                 {onboardingStep === 3 && (
-                  <div className={`grid gap-5 transition-all duration-500 ${hideCompanyReadinessResult ? 'lg:grid-cols-1' : 'lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]'}`}>
+                  <div className="mx-auto w-full max-w-4xl">
                     <div className="space-y-4">
-                      <label className="space-y-2 text-sm font-medium text-slate-300">
-                        O que sua empresa faz?
-                        <textarea
-                          value={companyIntakeText}
-                          onChange={(event) => setCompanyIntakeText(event.target.value)}
-                          rows={8}
-                          placeholder={generatingCompanyIntakeExample ? 'Gerando exemplo com base na sua empresa...' : companyIntakeExample}
-                          className="w-full resize-none rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm leading-6 text-white outline-none transition focus:border-emerald-400"
-                        />
-                      </label>
 
                       {canShowCompanyGuidedQuestions && (
                         <div className="rounded-2xl border border-emerald-500/20 bg-slate-950/80 p-4">
@@ -2102,6 +2625,19 @@ export default function Home() {
                                   <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
                                     <RefreshCw size={14} className="animate-spin" />
                                     Bella está pensando na próxima pergunta...
+                                  </div>
+                                </div>
+                              </div>
+                            ) : generatingCompanyGuidedOpening ? (
+                              <div className="flex items-start gap-3">
+                                <div className="bella-guide-avatar flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/30">
+                                  <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
+                                </div>
+                                <div className="relative flex-1 rounded-2xl border border-emerald-400/30 bg-slate-900 px-4 py-3">
+                                  <span className="absolute left-[-7px] top-5 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/30 bg-slate-900" />
+                                  <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
+                                    <RefreshCw size={14} className="animate-spin" />
+                                    Bella está preparando a conversa...
                                   </div>
                                 </div>
                               </div>
@@ -2180,73 +2716,101 @@ export default function Home() {
                             )}
                           </div>
 
-                          {currentCompanyGuidedQuestion && !generatingCompanyGuidedQuestion && !generatingCompanyGuidedClarification && (
+                          {currentCompanyGuidedQuestion && !generatingCompanyGuidedQuestion && !generatingCompanyGuidedClarification && !generatingCompanyGuidedOpening && (
                             <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/90 p-3">
+                              {realtimeVoiceActive ? (
+                                <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-violet-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center">
+                                      <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/20" />
+                                      <span className="absolute inset-1 animate-pulse rounded-full border border-emerald-300/40 bg-emerald-500/15" />
+                                      <div className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-white">
+                                        <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
+                                      </div>
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-white">
+                                        {realtimeVoiceStatus === 'connecting'
+                                          ? 'Iniciando conversa por voz...'
+                                          : realtimeVoiceStatus === 'speaking'
+                                            ? 'Bella está falando'
+                                            : realtimeVoiceStatus === 'processing'
+                                              ? 'Entendendo sua resposta...'
+                                              : 'Bella está ouvindo você'}
+                                      </p>
+                                      <div className="mt-2 flex h-5 items-center gap-1" aria-hidden="true">
+                                        {[8, 15, 11, 19, 13, 17, 9, 14].map((height, index) => (
+                                          <span
+                                            key={`voice-wave-${index}`}
+                                            className="w-1 animate-pulse rounded-full bg-emerald-300"
+                                            style={{ height, animationDelay: `${index * 90}ms`, animationDuration: '700ms' }}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={stopRealtimeVoice}
+                                    className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/20"
+                                  >
+                                    <Square size={14} />
+                                    Encerrar voz
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="mb-3 grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => document.getElementById('bella-guided-answer')?.focus()}
+                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
+                                  >
+                                    <MessageCircle size={17} />
+                                    Escrever
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void startRealtimeVoice()}
+                                    disabled={transcribingGuidedAnswer}
+                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-emerald-400 hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <Mic size={17} />
+                                    Conversar por voz
+                                  </button>
+                                </div>
+                              )}
                               <textarea
+                                id="bella-guided-answer"
                                 value={companyGuidedAnswer}
                                 onChange={(event) => setCompanyGuidedAnswer(event.target.value)}
                                 rows={3}
-                                disabled={(recordingGuidedAnswer && !guidedAnswerLiveMode) || transcribingGuidedAnswer}
+                                disabled={(recordingGuidedAnswer && !guidedAnswerLiveMode) || transcribingGuidedAnswer || realtimeVoiceActive}
                                 placeholder={
-                                  recordingGuidedAnswer
+                                  realtimeVoiceStatus === 'connecting'
+                                    ? 'Conectando a conversa por voz...'
+                                    : realtimeVoiceStatus === 'speaking'
+                                      ? 'Bella está falando... você pode interromper quando quiser.'
+                                      : realtimeVoiceStatus === 'listening'
+                                        ? 'Bella está ouvindo você...'
+                                  : recordingGuidedAnswer
                                     ? guidedAnswerLiveMode
                                       ? 'Estou ouvindo... fale sua resposta.'
                                       : 'Ouvindo você...'
                                     : transcribingGuidedAnswer
                                       ? 'Transcrevendo sua resposta...'
-                                      : 'Digite ou fale sua resposta para a Bella...'
+                                      : 'Escreva sua resposta para a Bella...'
                                 }
-                                className="w-full resize-none border-0 bg-transparent px-1 py-1 text-sm leading-6 text-white outline-none placeholder:text-slate-500 disabled:opacity-60"
+                                className={`w-full resize-none border-0 bg-transparent px-1 py-1 text-sm leading-6 text-white outline-none placeholder:text-slate-500 disabled:opacity-60 ${realtimeVoiceActive ? 'hidden' : ''}`}
                               />
-                              {guidedAnswerAudioError && (
+                              {!realtimeVoiceActive && guidedAnswerAudioError && (
                                 <p className="mt-1 text-xs leading-5 text-rose-300">{guidedAnswerAudioError}</p>
                               )}
-                              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                <p className="text-xs leading-5 text-slate-500">
-                                  {recordingGuidedAnswer
-                                    ? guidedAnswerLiveMode
-                                      ? 'Fale naturalmente — o texto aparece em tempo real. Ao parar de falar, a resposta é enviada e a Bella já faz a próxima pergunta sozinha.'
-                                      : 'Gravando... toque no microfone para parar e enviar.'
-                                    : transcribingGuidedAnswer
-                                      ? 'Transcrevendo e enviando sua resposta em áudio...'
-                                      : guidedAnswerHandsFree
-                                        ? 'Modo de conversa por voz ativado — vou te ouvir de novo em instantes.'
-                                        : 'Cada resposta entra automaticamente no contexto do bot. Toque no microfone para manter uma conversa por voz contínua.'}
-                                </p>
+                              <div className={realtimeVoiceActive ? 'hidden' : 'mt-2 flex justify-end'}>
                                 <div className="flex shrink-0 items-center gap-2">
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      if (guidedAnswerHandsFree) {
-                                        setGuidedAnswerHandsFree(false);
-                                        stopGuidedAnswerRecording();
-                                      } else {
-                                        setGuidedAnswerHandsFree(true);
-                                        startGuidedAnswerRecording();
-                                      }
-                                    }}
-                                    disabled={transcribingGuidedAnswer}
-                                    aria-label={guidedAnswerHandsFree ? 'Desligar conversa por voz' : 'Iniciar conversa por voz contínua'}
-                                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                                      recordingGuidedAnswer
-                                        ? 'animate-pulse border-rose-500 bg-rose-600 text-white'
-                                        : guidedAnswerHandsFree
-                                          ? 'animate-pulse border-emerald-400 bg-emerald-500/20 text-emerald-200'
-                                          : 'border-slate-700 bg-slate-900/80 text-slate-200 hover:border-emerald-500 hover:text-white'
-                                    }`}
-                                  >
-                                    {transcribingGuidedAnswer ? (
-                                      <RefreshCw size={16} className="animate-spin" />
-                                    ) : recordingGuidedAnswer || guidedAnswerHandsFree ? (
-                                      <Square size={16} />
-                                    ) : (
-                                      <Mic size={16} />
-                                    )}
-                                  </button>
-                                  <button
-                                    type="button"
                                     onClick={() => void handleAddCompanyGuidedAnswer()}
-                                    disabled={recordingGuidedAnswer || transcribingGuidedAnswer || guidedAnswerHandsFree}
+                                    disabled={recordingGuidedAnswer || transcribingGuidedAnswer || guidedAnswerHandsFree || realtimeVoiceActive}
                                     className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
                                     Enviar
@@ -2359,6 +2923,7 @@ export default function Home() {
                         </div>
                       )}
 
+                      {companyGuidedChatFinished && (
                       <div className="flex flex-col gap-3">
                         <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white">
                           <Paperclip size={16} />
@@ -2378,6 +2943,7 @@ export default function Home() {
                           <span className="px-2 py-1 text-xs text-slate-500">Até 10 arquivos, 5MB cada.</span>
                         </div>
                       </div>
+                      )}
 
                       {companyIntakeFiles.length > 0 && (
                         <div className="grid gap-3">
@@ -2417,7 +2983,7 @@ export default function Home() {
                       {companyIntakeError && <p className="text-sm text-rose-300">{companyIntakeError}</p>}
                     </div>
 
-                    <aside className={`rounded-2xl border border-slate-800 bg-slate-950/70 p-4 transition-all duration-500 ${hideCompanyReadinessResult ? 'max-h-0 overflow-hidden p-0 opacity-0 scale-95 pointer-events-none lg:hidden' : 'opacity-100 scale-100'}`}>
+                    <aside className="hidden">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Resultado</p>
                       <h3 className="mt-2 text-lg font-semibold text-white">O que a IA entendeu</h3>
                       {analyzingCompanyIntake ? (
@@ -2440,7 +3006,7 @@ export default function Home() {
                                 <p className="mt-1 text-xs leading-5 text-slate-500">Essencial para testar o bot.</p>
                               </div>
                               <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${companyReadinessComplete ? 'bg-emerald-500/15 text-emerald-200' : 'bg-amber-500/15 text-amber-200'}`}>
-                                {companyReadinessComplete ? 'Pronto' : 'Pendente'}
+                                {companyReadinessComplete ? 'Pronto' : 'Complementando'}
                               </span>
                             </div>
                             <div className="mt-3 space-y-2">
@@ -2450,14 +3016,14 @@ export default function Home() {
                                     <p className="text-xs font-semibold text-slate-400">{item.label}</p>
                                     <p className={`mt-0.5 truncate text-sm ${item.ready ? 'text-white' : 'text-slate-500'}`}>{item.value}</p>
                                   </div>
-                                  <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-bold ${item.ready ? 'bg-emerald-500/15 text-emerald-200' : 'bg-rose-500/15 text-rose-200'}`}>
-                                    {item.ready ? 'OK' : 'Não'}
+                                  <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-bold ${item.ready ? 'bg-emerald-500/15 text-emerald-200' : 'bg-amber-500/15 text-amber-200'}`}>
+                                    {item.ready ? 'OK' : 'Bella perguntará'}
                                   </span>
                                 </div>
                               ))}
                             </div>
                             <p className={`mt-3 text-xs leading-5 ${companyReadinessComplete ? 'text-emerald-200' : 'text-slate-500'}`}>
-                              {companyReadinessComplete ? 'Depois disso, o cliente já consegue testar o bot.' : 'Complete os itens com Não para liberar o próximo passo.'}
+                              {companyReadinessComplete ? 'A Bella já tem uma boa base sobre a empresa.' : 'Você pode seguir. A Bella perguntará esses detalhes naturalmente na conversa abaixo.'}
                             </p>
                           </div>
                         </div>
@@ -2622,59 +3188,6 @@ export default function Home() {
                 )}
               </div>
 
-              {companyReadinessWarningOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-4 backdrop-blur-sm">
-                  <div className="w-full max-w-md rounded-2xl border border-amber-400/25 bg-slate-900 p-5 shadow-2xl">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-200">
-                        <AlertCircle size={22} />
-                      </div>
-                      <div>
-                        <p className="text-lg font-semibold text-white">Falta completar uma informação</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-300">
-                          Adicione no texto “O que sua empresa faz?” as informações abaixo para eu conseguir liberar o próximo passo.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      {missingCompanyReadinessItems.map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-sm font-semibold text-slate-200">
-                          <span className="h-2 w-2 rounded-full bg-amber-300" />
-                          {item.label}
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      {missingCompanyReadinessItems.map((item) => (
-                        <p key={`example-${item.id}`} className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs leading-5 text-slate-400">
-                          <span className="font-semibold text-slate-300">Exemplo para {item.label}:</span>{' '}
-                          “{companyReadinessExample(item.id)}”
-                        </p>
-                      ))}
-                    </div>
-
-                    <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                      <button
-                        type="button"
-                        onClick={() => setCompanyReadinessWarningOpen(false)}
-                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
-                      >
-                        Fechar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCompanyReadinessWarningOpen(false)}
-                        className="inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
-                      >
-                        Vou completar no texto
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div className="flex flex-col-reverse gap-3 border-t border-slate-800 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                 <button
                   type="button"
@@ -2684,15 +3197,17 @@ export default function Home() {
                   Voltar
                 </button>
                 {onboardingStep < onboardingTotalSteps ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleNextOnboardingStep()}
-                    disabled={generatingCompanyIntakeExample || companyIntakeNeedsProcessing}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-                  >
-                    {generatingCompanyIntakeExample ? 'Gerando exemplo...' : companyIntakeNeedsProcessing ? 'Processando empresa...' : 'Continuar'}
-                    {companyIntakeNeedsProcessing ? <RefreshCw size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-                  </button>
+                  (onboardingStep !== 3 || companyGuidedChatFinished) && (
+                    <button
+                      type="button"
+                      onClick={() => void handleNextOnboardingStep()}
+                      disabled={companyIntakeNeedsProcessing}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                    >
+                      {companyIntakeNeedsProcessing ? 'Processando empresa...' : 'Continuar'}
+                      {companyIntakeNeedsProcessing ? <RefreshCw size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                    </button>
+                  )
                 ) : (
                   <button
                     type="button"
