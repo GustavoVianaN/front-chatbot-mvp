@@ -18,7 +18,7 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
 import type { AuthUser, AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeDescriptionAudio, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
@@ -65,9 +65,45 @@ type CompanyReadinessItem = {
 type CompanyGuidedQuestion = {
   id: number;
   question: string;
-  importance: 'required' | 'recommended' | 'optional';
-  badge: string;
 };
+
+// Tipagem mínima da Web Speech API (não incluída nos libs padrão do TS).
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  0: { transcript: string };
+};
+type SpeechRecognitionResultListLike = {
+  length: number;
+  [index: number]: SpeechRecognitionResultLike;
+};
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: SpeechRecognitionResultListLike;
+};
+type SpeechRecognitionErrorEventLike = {
+  error: string;
+};
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+};
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
+}
 
 const companyIntakeFileTypes = new Set([
   'application/pdf',
@@ -137,42 +173,15 @@ const onboardingBellaGuideMessages: Record<number, { title: string; body: string
   },
 };
 const minimumCompanyGuidedAnswers = 4;
-const companyGuidedQuestions: CompanyGuidedQuestion[] = [
+// Antes existia uma lista fixa de 6 perguntas com tópicos pré-definidos
+// (parecia questionário/entrevista). Agora só a primeira pergunta é fixa —
+// as próximas nascem da própria conversa, uma de cada vez, então isso vira
+// o estado inicial de uma lista que cresce dinamicamente.
+const maxCompanyGuidedQuestions = 6;
+const initialCompanyGuidedQuestions: CompanyGuidedQuestion[] = [
   {
     id: 1,
     question: 'Como funciona o atendimento, desde o primeiro contato até a venda ou serviço ser finalizado?',
-    importance: 'required',
-    badge: 'Obrigatória',
-  },
-  {
-    id: 2,
-    question: 'Qual informação você sempre precisa confirmar com o cliente antes de seguir o atendimento?',
-    importance: 'required',
-    badge: 'Obrigatória',
-  },
-  {
-    id: 3,
-    question: 'Em qual parte do atendimento você mais precisa que a IA tenha cuidado?',
-    importance: 'required',
-    badge: 'Obrigatória',
-  },
-  {
-    id: 4,
-    question: 'Quais perguntas seus clientes mais fazem no dia a dia?',
-    importance: 'recommended',
-    badge: 'Recomendado',
-  },
-  {
-    id: 5,
-    question: 'Qual dessas perguntas frequentes precisa de uma resposta exata da IA?',
-    importance: 'recommended',
-    badge: 'Recomendado',
-  },
-  {
-    id: 6,
-    question: 'E qual resposta eu devo dar quando o cliente fizer essa pergunta?',
-    importance: 'recommended',
-    badge: 'Recomendado',
   },
 ];
 
@@ -268,6 +277,41 @@ function guidedAnswerValidationError(text: string): string {
   }
 
   return '';
+}
+
+// Detecta quando a pessoa está confusa ou não sabe responder ("não sei",
+// "tô perdido", "não entendi"...), em vez de tratar isso como uma resposta
+// de conteúdo de verdade — casos assim passam na validação de "é português
+// plausível" acima, mas não ensinam nada sobre a empresa.
+function isGuidedAnswerConfused(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (!normalized) return false;
+
+  const confusedPatterns = [
+    /\bnao sei\b/,
+    /\bsei la\b/,
+    /\bnao faco ideia\b/,
+    /\bnao tenho ideia\b/,
+    /\bto perdid[oa]\b/,
+    /\bestou perdid[oa]\b/,
+    /\bnao entendi\b/,
+    /\bnao compreendi\b/,
+    /\bpode repetir\b/,
+    /\bpode explicar\b/,
+    /\bcomo assim\b/,
+    /\bnao faz sentido\b/,
+    /\bnao sei explicar\b/,
+    /\bnao sei dizer\b/,
+    /\bconfus[oa]\b/,
+    /\bnao sei o que (dizer|responder|falar)\b/,
+  ];
+
+  return confusedPatterns.some((pattern) => pattern.test(normalized));
 }
 
 function buildAutomaticWelcomeMessage(input: { assistantName: string; companyName: string; segment: string }) {
@@ -538,9 +582,23 @@ export default function Home() {
   const [recordingGuidedAnswer, setRecordingGuidedAnswer] = useState(false);
   const [transcribingGuidedAnswer, setTranscribingGuidedAnswer] = useState(false);
   const [guidedAnswerAudioError, setGuidedAnswerAudioError] = useState('');
+  const [guidedAnswerLiveMode, setGuidedAnswerLiveMode] = useState(false);
+  const [guidedAnswerHandsFree, setGuidedAnswerHandsFree] = useState(false);
   const guidedAnswerRecorderRef = useRef<MediaRecorder | null>(null);
   const guidedAnswerChunksRef = useRef<Blob[]>([]);
-  const [companyGuidedQuestionOverrides, setCompanyGuidedQuestionOverrides] = useState<Record<number, string>>({});
+  const guidedAnswerRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const guidedAnswerFinalTranscriptRef = useRef('');
+  const guidedAnswerSilenceTimerRef = useRef<number | null>(null);
+
+  const clearGuidedAnswerSilenceTimer = () => {
+    if (guidedAnswerSilenceTimerRef.current !== null) {
+      window.clearTimeout(guidedAnswerSilenceTimerRef.current);
+      guidedAnswerSilenceTimerRef.current = null;
+    }
+  };
+  const [companyGuidedQuestions, setCompanyGuidedQuestions] = useState<CompanyGuidedQuestion[]>(initialCompanyGuidedQuestions);
+  const [companyGuidedClarifications, setCompanyGuidedClarifications] = useState<Record<number, { userText: string; bellaText: string }[]>>({});
+  const [generatingCompanyGuidedClarification, setGeneratingCompanyGuidedClarification] = useState(false);
   const [generatingCompanyGuidedQuestion, setGeneratingCompanyGuidedQuestion] = useState(false);
   const [companyGuidedQuestionsUnlocked, setCompanyGuidedQuestionsUnlocked] = useState(false);
   const [companyGuidedLearningSummary, setCompanyGuidedLearningSummary] = useState('');
@@ -906,10 +964,10 @@ export default function Home() {
   }), [companyIntakeFiles, companyIntakeText, effectiveCompanyIntakeSummary, onboardingDraft]);
   const answeredCompanyGuidedQuestionIds = useMemo(() => new Set(companyGuidedQuestions
     .filter((question) => Boolean(companyGuidedAnswers[question.id]?.trim()) || guidedQuestionAnsweredInText(companyIntakeText, question.id))
-    .map((question) => question.id)), [companyGuidedAnswers, companyIntakeText]);
+    .map((question) => question.id)), [companyGuidedAnswers, companyIntakeText, companyGuidedQuestions]);
   const answeredCompanyGuidedCount = answeredCompanyGuidedQuestionIds.size;
   const currentCompanyGuidedQuestion = companyGuidedQuestions.find((question) => !answeredCompanyGuidedQuestionIds.has(question.id)) || null;
-  const getCompanyGuidedQuestionText = (question: CompanyGuidedQuestion) => companyGuidedQuestionOverrides[question.id] || question.question;
+  const getCompanyGuidedQuestionText = (question: CompanyGuidedQuestion) => question.question;
   const companyGuidedConversation = companyGuidedQuestions
     .filter((question) => answeredCompanyGuidedQuestionIds.has(question.id))
     .map((question) => ({
@@ -977,6 +1035,8 @@ export default function Home() {
     companyGuidedLearningSummary,
     currentCompanyGuidedQuestion?.id,
     generatingCompanyGuidedQuestion,
+    generatingCompanyGuidedClarification,
+    Object.values(companyGuidedClarifications).reduce((sum, entries) => sum + entries.length, 0),
   ]);
 
   useEffect(() => {
@@ -1248,7 +1308,8 @@ export default function Home() {
       setCompanyIntakeText('');
       setCompanyGuidedAnswer('');
       setCompanyGuidedAnswers({});
-      setCompanyGuidedQuestionOverrides({});
+      setCompanyGuidedQuestions(initialCompanyGuidedQuestions);
+      setCompanyGuidedClarifications({});
       setCompanyGuidedQuestionsUnlocked(false);
       setCompanyGuidedLearningSummary('');
       setCompanyGuidedLearningSummaryKey('');
@@ -1302,6 +1363,43 @@ export default function Home() {
     const answer = (answerOverride ?? companyGuidedAnswer).trim();
     const questionText = getCompanyGuidedQuestionText(currentCompanyGuidedQuestion);
 
+    // "Não sei", "tô perdido" etc. não são uma resposta de conteúdo — em vez
+    // de aceitar isso como se fosse informação real e pular pra próxima
+    // pergunta, a Bella acolhe e reformula a MESMA pergunta de um jeito mais
+    // simples, com exemplo, como faria uma pessoa de verdade.
+    if (answer && isGuidedAnswerConfused(answer)) {
+      const questionId = currentCompanyGuidedQuestion.id;
+      setCompanyGuidedAnswer('');
+      setGeneratingCompanyGuidedClarification(true);
+
+      try {
+        const result = await generateCompanyIntakeClarification({
+          company_name: onboardingDraft.company_name.trim(),
+          company_segment: onboardingDraft.segment.trim(),
+          company_description: [effectiveCompanyIntakeSummary.trim(), companyIntakeText.trim()].filter(Boolean).join('\n\n'),
+          question: questionText,
+          customer_reply: answer,
+        });
+
+        setCompanyGuidedClarifications((current) => ({
+          ...current,
+          [questionId]: [...(current[questionId] || []), { userText: answer, bellaText: result.message }],
+        }));
+      } catch {
+        setCompanyGuidedClarifications((current) => ({
+          ...current,
+          [questionId]: [...(current[questionId] || []), {
+            userText: answer,
+            bellaText: 'Sem problema! Me conta com suas palavras, mesmo que seja só uma ideia geral — qualquer detalhe já ajuda.',
+          }],
+        }));
+      } finally {
+        setGeneratingCompanyGuidedClarification(false);
+      }
+
+      return;
+    }
+
     const validationError = guidedAnswerValidationError(answer);
     if (validationError) {
       toast(validationError);
@@ -1318,9 +1416,11 @@ export default function Home() {
     setCompanyGuidedAnswer('');
 
     const nextQuestionId = currentCompanyGuidedQuestion.id + 1;
-    const hasNextQuestion = companyGuidedQuestions.some((question) => question.id === nextQuestionId);
 
-    if (hasNextQuestion) {
+    // Não existe mais uma lista fixa de tópicos: a próxima pergunta é sempre
+    // gerada com base no que a pessoa acabou de contar, até um limite
+    // razoável de trocas — como uma conversa de verdade, não um roteiro.
+    if (nextQuestionId <= maxCompanyGuidedQuestions) {
       setGeneratingCompanyGuidedQuestion(true);
 
       try {
@@ -1330,26 +1430,15 @@ export default function Home() {
           company_description: [effectiveCompanyIntakeSummary.trim(), companyIntakeText.trim()].filter(Boolean).join('\n\n'),
           question: questionText,
           customer_answer: answer,
-          question_count: 1,
-          mode: nextQuestionId >= 4 ? 'faq_follow_up' : 'service_flow_follow_up',
         });
-        const nextQuestion = result.question?.trim();
+        const nextQuestion = result.question?.trim()
+          || `Você comentou "${answer.slice(0, 90)}". Me conta mais sobre isso — o que mais é importante eu saber aqui?`;
 
-        if (nextQuestion) {
-          setCompanyGuidedQuestionOverrides((current) => ({
-            ...current,
-            [nextQuestionId]: nextQuestion,
-          }));
-        }
+        setCompanyGuidedQuestions((current) => [...current, { id: nextQuestionId, question: nextQuestion }]);
       } catch {
-        const fallbackQuestion = nextQuestionId >= 4
-          ? `Sobre o que você comentou — “${answer.slice(0, 90)}” — qual dúvida do cliente a IA precisa saber responder?`
-          : `Você comentou “${answer.slice(0, 90)}”. O que a IA deve fazer em seguida nesse atendimento?`;
-        setCompanyGuidedQuestionOverrides((current) => ({
-          ...current,
-          [nextQuestionId]: fallbackQuestion,
-        }));
-        toast('Não consegui gerar as próximas perguntas da Bella agora. Vou seguir com perguntas padrão.');
+        const fallbackQuestion = `Você comentou "${answer.slice(0, 90)}". Me conta mais sobre isso — o que mais é importante eu saber aqui?`;
+        setCompanyGuidedQuestions((current) => [...current, { id: nextQuestionId, question: fallbackQuestion }]);
+        toast('Não consegui gerar a próxima pergunta da Bella agora. Vou seguir com uma pergunta padrão.');
       } finally {
         setGeneratingCompanyGuidedQuestion(false);
       }
@@ -1358,11 +1447,15 @@ export default function Home() {
     toast('Resposta adicionada ao contexto.');
   };
 
-  const startGuidedAnswerRecording = async () => {
+  // Fallback para navegadores sem Web Speech API: grava o áudio inteiro e
+  // manda para o backend transcrever (Whisper) só depois de parar de falar.
+  const startGuidedAnswerAudioFallback = async () => {
     setGuidedAnswerAudioError('');
+    setGuidedAnswerLiveMode(false);
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setGuidedAnswerAudioError('Seu navegador não permite gravação de áudio aqui.');
+      setGuidedAnswerAudioError('Seu navegador não permite responder por voz aqui.');
+      setGuidedAnswerHandsFree(false);
       return;
     }
 
@@ -1399,6 +1492,7 @@ export default function Home() {
 
           if (!text) {
             setGuidedAnswerAudioError('Não consegui entender o áudio. Tente falar novamente ou digite sua resposta.');
+            setGuidedAnswerHandsFree(false);
             return;
           }
 
@@ -1406,6 +1500,7 @@ export default function Home() {
           await handleAddCompanyGuidedAnswer(text);
         } catch (error) {
           setGuidedAnswerAudioError(error instanceof Error ? error.message : 'Não foi possível transcrever o áudio agora.');
+          setGuidedAnswerHandsFree(false);
         } finally {
           setTranscribingGuidedAnswer(false);
         }
@@ -1415,14 +1510,168 @@ export default function Home() {
       setRecordingGuidedAnswer(true);
     } catch {
       setGuidedAnswerAudioError('Não foi possível acessar o microfone.');
+      setGuidedAnswerHandsFree(false);
     }
   };
 
-  const stopGuidedAnswerRecording = () => {
+  const stopGuidedAnswerAudioFallback = () => {
     if (guidedAnswerRecorderRef.current?.state === 'recording') {
       guidedAnswerRecorderRef.current.stop();
     }
   };
+
+  // Caminho principal: reconhecimento de voz ao vivo no navegador (Web Speech
+  // API). O texto vai aparecendo em tempo real enquanto a pessoa fala, e
+  // assim que ela para de falar a resposta é enviada na hora — como numa
+  // conversa real, sem esperar upload/transcrição no servidor.
+  const startGuidedAnswerRecording = () => {
+    setGuidedAnswerAudioError('');
+    const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
+
+    if (!SpeechRecognitionCtor) {
+      void startGuidedAnswerAudioFallback();
+      return;
+    }
+
+    let hadFatalError = false;
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    guidedAnswerFinalTranscriptRef.current = '';
+    guidedAnswerRecognitionRef.current = recognition;
+
+    recognition.onresult = (event) => {
+      let interim = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const text = result[0]?.transcript || '';
+
+        if (result.isFinal) {
+          guidedAnswerFinalTranscriptRef.current = [guidedAnswerFinalTranscriptRef.current, text.trim()].filter(Boolean).join(' ');
+        } else {
+          interim += text;
+        }
+      }
+
+      setCompanyGuidedAnswer([guidedAnswerFinalTranscriptRef.current, interim].filter(Boolean).join(' '));
+
+      // O Chrome não encerra sozinho no modo contínuo, então detectamos a
+      // pausa na fala nós mesmos: a cada trecho reconhecido o timer reinicia;
+      // se não vier nada novo por um tempinho, encerramos e enviamos.
+      clearGuidedAnswerSilenceTimer();
+      guidedAnswerSilenceTimerRef.current = window.setTimeout(() => {
+        if (guidedAnswerRecognitionRef.current === recognition) {
+          recognition.stop();
+        }
+      }, 2000);
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === 'no-speech' || event.error === 'aborted') return;
+
+      hadFatalError = true;
+
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setGuidedAnswerAudioError('Não foi possível acessar o microfone.');
+      } else if (event.error === 'network') {
+        setGuidedAnswerAudioError('Sem conexão para o reconhecimento de voz agora. Tente novamente.');
+      } else {
+        setGuidedAnswerAudioError('Não consegui ouvir com clareza. Tente novamente ou digite sua resposta.');
+      }
+    };
+
+    recognition.onend = () => {
+      clearGuidedAnswerSilenceTimer();
+      setRecordingGuidedAnswer(false);
+      guidedAnswerRecognitionRef.current = null;
+      const finalText = guidedAnswerFinalTranscriptRef.current.trim();
+      guidedAnswerFinalTranscriptRef.current = '';
+
+      if (hadFatalError) {
+        // Evita ficar tentando de novo sozinho em loop quando o problema é
+        // permissão de microfone, rede etc. — o usuário decide se tenta de novo.
+        setGuidedAnswerHandsFree(false);
+        return;
+      }
+
+      if (finalText) {
+        void handleAddCompanyGuidedAnswer(finalText);
+      }
+      // Se o modo mãos-livres estiver ligado, o efeito abaixo religa o
+      // microfone sozinho assim que a próxima pergunta da Bella estiver pronta.
+    };
+
+    try {
+      recognition.start();
+      setGuidedAnswerLiveMode(true);
+      setRecordingGuidedAnswer(true);
+
+      // Se ninguém falar nada, não fica escutando pra sempre.
+      clearGuidedAnswerSilenceTimer();
+      guidedAnswerSilenceTimerRef.current = window.setTimeout(() => {
+        if (guidedAnswerRecognitionRef.current === recognition) {
+          recognition.stop();
+        }
+      }, 6000);
+    } catch {
+      // Falha síncrona ao iniciar (ex: instância anterior ainda encerrando).
+      // Desliga o modo mãos-livres para não entrar em loop de tentativas.
+      guidedAnswerRecognitionRef.current = null;
+      setGuidedAnswerHandsFree(false);
+      setGuidedAnswerAudioError('Não foi possível iniciar o reconhecimento de voz.');
+    }
+  };
+
+  const stopGuidedAnswerRecording = () => {
+    if (guidedAnswerRecognitionRef.current) {
+      guidedAnswerRecognitionRef.current.stop();
+      return;
+    }
+
+    stopGuidedAnswerAudioFallback();
+  };
+
+  // Modo mãos-livres: religa o microfone sozinho assim que a resposta
+  // anterior foi enviada e a próxima pergunta da Bella está pronta, para não
+  // precisar tocar no microfone a cada pergunta.
+  useEffect(() => {
+    if (!guidedAnswerHandsFree) return;
+    if (recordingGuidedAnswer || transcribingGuidedAnswer || generatingCompanyGuidedQuestion || generatingCompanyGuidedClarification) return;
+
+    if (!currentCompanyGuidedQuestion) {
+      setGuidedAnswerHandsFree(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      startGuidedAnswerRecording();
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [guidedAnswerHandsFree, recordingGuidedAnswer, transcribingGuidedAnswer, generatingCompanyGuidedQuestion, generatingCompanyGuidedClarification, currentCompanyGuidedQuestion?.id]);
+
+  // Ao sair do passo 3 (ou do wizard), desliga o microfone por completo em
+  // vez de deixá-lo escutando em segundo plano.
+  useEffect(() => {
+    if (onboardingStep === 3 && onboardingMode === 'wizard') return;
+
+    setGuidedAnswerHandsFree(false);
+    setRecordingGuidedAnswer(false);
+    clearGuidedAnswerSilenceTimer();
+    const recognition = guidedAnswerRecognitionRef.current;
+
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      recognition.abort();
+      guidedAnswerRecognitionRef.current = null;
+    }
+
+    stopGuidedAnswerAudioFallback();
+  }, [onboardingStep, onboardingMode]);
 
   const onboardingStepIsValid = () => {
     if (onboardingStep === 1) {
@@ -1816,6 +2065,14 @@ export default function Home() {
 
                       {canShowCompanyGuidedQuestions && (
                         <div className="rounded-2xl border border-emerald-500/20 bg-slate-950/80 p-4">
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Conversa com a Bella</p>
+                            <p className={`text-xs font-semibold ${companyGuidedMinimumComplete ? 'text-emerald-300' : 'text-amber-300'}`}>
+                              {companyGuidedMinimumComplete
+                                ? 'Já dá pra continuar quando quiser'
+                                : `Mais ${minimumCompanyGuidedAnswers - answeredCompanyGuidedCount} resposta${minimumCompanyGuidedAnswers - answeredCompanyGuidedCount === 1 ? '' : 's'} e seguimos em frente`}
+                            </p>
+                          </div>
                           <div ref={companyGuidedScrollRef} className="max-h-[430px] space-y-4 overflow-y-auto pr-1">
                             {companyGuidedConversation.map((message) => (
                               <div key={message.question.id} className="space-y-3">
@@ -1855,28 +2112,12 @@ export default function Home() {
                                 </div>
                                 <div className="relative flex-1 rounded-2xl border border-emerald-400/30 bg-slate-900 px-4 py-3">
                                   <span className="absolute left-[-7px] top-5 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/30 bg-slate-900" />
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="rounded-full bg-slate-950 px-2.5 py-1 text-xs font-bold text-slate-300">
-                                      Pergunta {currentCompanyGuidedQuestion.id}
-                                    </span>
-                                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                                      currentCompanyGuidedQuestion.importance === 'required'
-                                        ? 'bg-emerald-500/15 text-emerald-200'
-                                        : currentCompanyGuidedQuestion.importance === 'recommended'
-                                          ? 'bg-amber-500/15 text-amber-200'
-                                          : 'bg-slate-700/60 text-slate-300'
-                                    }`}>
-                                      {currentCompanyGuidedQuestion.badge}
-                                    </span>
-                                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${companyGuidedMinimumComplete ? 'bg-emerald-500/15 text-emerald-200' : 'bg-amber-500/15 text-amber-200'}`}>
-                                      {answeredCompanyGuidedCount}/{minimumCompanyGuidedAnswers} mínimas
-                                    </span>
-                                  </div>
+                                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Bella</p>
                                   <TypewriterText
                                     key={`guided-question-body-${currentCompanyGuidedQuestion.id}`}
                                     text={getCompanyGuidedQuestionText(currentCompanyGuidedQuestion)}
                                     speed={18}
-                                    className="mt-3 text-sm leading-6 text-slate-300"
+                                    className="mt-2 text-sm leading-6 text-slate-300"
                                   />
                                 </div>
                               </div>
@@ -1905,21 +2146,55 @@ export default function Home() {
                                 </div>
                               </div>
                             )}
+
+                            {currentCompanyGuidedQuestion && (companyGuidedClarifications[currentCompanyGuidedQuestion.id] || []).map((exchange, index) => (
+                              <div key={`guided-clarify-${currentCompanyGuidedQuestion.id}-${index}`} className="space-y-3">
+                                <div className="ml-auto max-w-[88%] rounded-2xl border border-slate-700 bg-emerald-600 px-4 py-3 text-sm leading-6 text-white">
+                                  {exchange.userText}
+                                </div>
+                                <div className="flex items-start gap-3">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/30">
+                                    <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
+                                  </div>
+                                  <div className="relative flex-1 rounded-2xl border border-emerald-400/25 bg-slate-900 px-4 py-3">
+                                    <span className="absolute left-[-7px] top-5 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/25 bg-slate-900" />
+                                    <p className="text-sm leading-6 text-slate-300">{exchange.bellaText}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {generatingCompanyGuidedClarification && (
+                              <div className="flex items-start gap-3">
+                                <div className="bella-guide-avatar flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/30">
+                                  <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
+                                </div>
+                                <div className="relative flex-1 rounded-2xl border border-emerald-400/30 bg-slate-900 px-4 py-3">
+                                  <span className="absolute left-[-7px] top-5 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/30 bg-slate-900" />
+                                  <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
+                                    <RefreshCw size={14} className="animate-spin" />
+                                    Bella está reformulando a pergunta...
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
 
-                          {currentCompanyGuidedQuestion && !generatingCompanyGuidedQuestion && (
+                          {currentCompanyGuidedQuestion && !generatingCompanyGuidedQuestion && !generatingCompanyGuidedClarification && (
                             <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/90 p-3">
                               <textarea
                                 value={companyGuidedAnswer}
                                 onChange={(event) => setCompanyGuidedAnswer(event.target.value)}
                                 rows={3}
-                                disabled={recordingGuidedAnswer || transcribingGuidedAnswer}
+                                disabled={(recordingGuidedAnswer && !guidedAnswerLiveMode) || transcribingGuidedAnswer}
                                 placeholder={
                                   recordingGuidedAnswer
-                                    ? 'Ouvindo você...'
+                                    ? guidedAnswerLiveMode
+                                      ? 'Estou ouvindo... fale sua resposta.'
+                                      : 'Ouvindo você...'
                                     : transcribingGuidedAnswer
                                       ? 'Transcrevendo sua resposta...'
-                                      : 'Digite ou grave um áudio com sua resposta para a Bella...'
+                                      : 'Digite ou fale sua resposta para a Bella...'
                                 }
                                 className="w-full resize-none border-0 bg-transparent px-1 py-1 text-sm leading-6 text-white outline-none placeholder:text-slate-500 disabled:opacity-60"
                               />
@@ -1929,26 +2204,40 @@ export default function Home() {
                               <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <p className="text-xs leading-5 text-slate-500">
                                   {recordingGuidedAnswer
-                                    ? 'Gravando... toque no microfone para parar e enviar.'
+                                    ? guidedAnswerLiveMode
+                                      ? 'Fale naturalmente — o texto aparece em tempo real. Ao parar de falar, a resposta é enviada e a Bella já faz a próxima pergunta sozinha.'
+                                      : 'Gravando... toque no microfone para parar e enviar.'
                                     : transcribingGuidedAnswer
                                       ? 'Transcrevendo e enviando sua resposta em áudio...'
-                                      : 'Cada resposta entra automaticamente no contexto do bot. Você pode digitar ou responder por voz.'}
+                                      : guidedAnswerHandsFree
+                                        ? 'Modo de conversa por voz ativado — vou te ouvir de novo em instantes.'
+                                        : 'Cada resposta entra automaticamente no contexto do bot. Toque no microfone para manter uma conversa por voz contínua.'}
                                 </p>
                                 <div className="flex shrink-0 items-center gap-2">
                                   <button
                                     type="button"
-                                    onClick={() => (recordingGuidedAnswer ? stopGuidedAnswerRecording() : void startGuidedAnswerRecording())}
+                                    onClick={() => {
+                                      if (guidedAnswerHandsFree) {
+                                        setGuidedAnswerHandsFree(false);
+                                        stopGuidedAnswerRecording();
+                                      } else {
+                                        setGuidedAnswerHandsFree(true);
+                                        startGuidedAnswerRecording();
+                                      }
+                                    }}
                                     disabled={transcribingGuidedAnswer}
-                                    aria-label={recordingGuidedAnswer ? 'Parar gravação e enviar' : 'Responder por áudio'}
+                                    aria-label={guidedAnswerHandsFree ? 'Desligar conversa por voz' : 'Iniciar conversa por voz contínua'}
                                     className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-60 ${
                                       recordingGuidedAnswer
                                         ? 'animate-pulse border-rose-500 bg-rose-600 text-white'
-                                        : 'border-slate-700 bg-slate-900/80 text-slate-200 hover:border-emerald-500 hover:text-white'
+                                        : guidedAnswerHandsFree
+                                          ? 'animate-pulse border-emerald-400 bg-emerald-500/20 text-emerald-200'
+                                          : 'border-slate-700 bg-slate-900/80 text-slate-200 hover:border-emerald-500 hover:text-white'
                                     }`}
                                   >
                                     {transcribingGuidedAnswer ? (
                                       <RefreshCw size={16} className="animate-spin" />
-                                    ) : recordingGuidedAnswer ? (
+                                    ) : recordingGuidedAnswer || guidedAnswerHandsFree ? (
                                       <Square size={16} />
                                     ) : (
                                       <Mic size={16} />
@@ -1957,7 +2246,7 @@ export default function Home() {
                                   <button
                                     type="button"
                                     onClick={() => void handleAddCompanyGuidedAnswer()}
-                                    disabled={recordingGuidedAnswer || transcribingGuidedAnswer}
+                                    disabled={recordingGuidedAnswer || transcribingGuidedAnswer || guidedAnswerHandsFree}
                                     className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
                                     Enviar

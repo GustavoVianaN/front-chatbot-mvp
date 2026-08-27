@@ -280,10 +280,21 @@ export async function generateCompanyIntakeFollowUpQuestion(data: {
   company_description: string;
   question: string;
   customer_answer: string;
-  question_count?: number;
-  mode?: 'service_flow_follow_up' | 'faq_follow_up';
-}): Promise<{ question: string; questions?: string[] }> {
+}): Promise<{ question: string }> {
   return apiRequest('/dashboard/company-intake/follow-up-question', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function generateCompanyIntakeClarification(data: {
+  company_name: string;
+  company_segment: string;
+  company_description: string;
+  question: string;
+  customer_reply: string;
+}): Promise<{ message: string }> {
+  return apiRequest('/dashboard/company-intake/clarify-question', {
     method: 'POST',
     body: JSON.stringify(data),
   });
