@@ -10,12 +10,15 @@ export function proxy(request: NextRequest) {
   const isAuthApi = request.nextUrl.pathname.startsWith('/api/auth/');
   const isLoginPage = request.nextUrl.pathname === '/login';
   const isSetupPasswordPage = request.nextUrl.pathname === '/setup-password';
+  const isPublicPage = ['/welcome', '/signup', '/forgot-password', '/legal/terms', '/legal/privacy'].some(
+    (path) => request.nextUrl.pathname === path
+  );
 
   if (isAuthApi) {
     return NextResponse.next();
   }
 
-  if (!hasSession && !isLoginPage && !isSetupPasswordPage) {
+  if (!hasSession && !isLoginPage && !isSetupPasswordPage && !isPublicPage) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

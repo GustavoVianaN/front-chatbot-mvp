@@ -39,6 +39,10 @@ const sections = [
   { id: 'settings', label: 'Configurações', icon: SettingsIcon },
 ] as const;
 
+// Recurso preservado para uma fase futura. A implementação Realtime continua abaixo,
+// mas fica fora da experiência de lançamento até concluirmos estabilidade e cobrança por minuto.
+const REALTIME_VOICE_ENABLED = false;
+
 type SectionId = (typeof sections)[number]['id'];
 type BotConfigTab = 'config' | 'knowledge';
 type WhatsappTab = 'status' | 'conversations';
@@ -614,6 +618,12 @@ export default function Home() {
   const realtimeNegotiatingRef = useRef(false);
   const realtimeListenTimerRef = useRef<number | null>(null);
   const realtimeTranscriptionTimerRef = useRef<number | null>(null);
+  const realtimeAudioContextRef = useRef<AudioContext | null>(null);
+  const realtimeAnalyserRef = useRef<AnalyserNode | null>(null);
+  const realtimeVadFrameRef = useRef<number | null>(null);
+  const realtimeVoiceDetectedAtRef = useRef<number | null>(null);
+  const realtimeLastVoiceAtRef = useRef<number | null>(null);
+  const realtimeVoiceStatusRef = useRef(realtimeVoiceStatus);
   const realtimeSpokenQuestionIdRef = useRef<number | null>(null);
   const currentCompanyGuidedQuestionRef = useRef<CompanyGuidedQuestion | null>(null);
   const guidedAnswerSubmitRef = useRef<(answer: string) => Promise<void>>(async () => undefined);
@@ -1560,6 +1570,7 @@ export default function Home() {
     await handleAddCompanyGuidedAnswer(answer);
   };
   currentCompanyGuidedQuestionRef.current = currentCompanyGuidedQuestion;
+  realtimeVoiceStatusRef.current = realtimeVoiceStatus;
 
   const realtimeVoiceActive = realtimeVoiceStatus === 'connecting'
     || realtimeVoiceStatus === 'listening'
@@ -1603,6 +1614,15 @@ export default function Home() {
       window.clearTimeout(realtimeTranscriptionTimerRef.current);
       realtimeTranscriptionTimerRef.current = null;
     }
+    if (realtimeVadFrameRef.current !== null) {
+      window.cancelAnimationFrame(realtimeVadFrameRef.current);
+      realtimeVadFrameRef.current = null;
+    }
+    void realtimeAudioContextRef.current?.close().catch(() => undefined);
+    realtimeAudioContextRef.current = null;
+    realtimeAnalyserRef.current = null;
+    realtimeVoiceDetectedAtRef.current = null;
+    realtimeLastVoiceAtRef.current = null;
     realtimeDataChannelRef.current?.close();
     realtimePeerConnectionRef.current?.close();
     realtimeMicrophoneStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -1653,6 +1673,64 @@ export default function Home() {
       realtimeMicrophoneStreamRef.current = stream;
       realtimeRemoteAudioRef.current = remoteAudio;
 
+      const AudioContextCtor = window.AudioContext;
+      const audioContext = new AudioContextCtor();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.25;
+      audioContext.createMediaStreamSource(stream).connect(analyser);
+      realtimeAudioContextRef.current = audioContext;
+      realtimeAnalyserRef.current = analyser;
+
+      const samples = new Uint8Array(analyser.fftSize);
+      const monitorLocalSilence = () => {
+        const activeAnalyser = realtimeAnalyserRef.current;
+        if (!activeAnalyser) return;
+
+        if (realtimeVoiceStatusRef.current === 'listening' && dataChannel.readyState === 'open') {
+          activeAnalyser.getByteTimeDomainData(samples);
+          let energy = 0;
+          for (const sample of samples) {
+            const normalized = (sample - 128) / 128;
+            energy += normalized * normalized;
+          }
+          const volume = Math.sqrt(energy / samples.length);
+          const now = Date.now();
+
+          if (volume >= 0.018) {
+            realtimeVoiceDetectedAtRef.current ??= now;
+            realtimeLastVoiceAtRef.current = now;
+          } else if (
+            realtimeVoiceDetectedAtRef.current !== null
+            && realtimeLastVoiceAtRef.current !== null
+            && now - realtimeVoiceDetectedAtRef.current >= 350
+            && now - realtimeLastVoiceAtRef.current >= 900
+          ) {
+            realtimeVoiceDetectedAtRef.current = null;
+            realtimeLastVoiceAtRef.current = null;
+            stream.getAudioTracks().forEach((track) => {
+              track.enabled = false;
+            });
+            setRealtimeVoiceStatus('processing');
+            dataChannel.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+            if (realtimeTranscriptionTimerRef.current !== null) {
+              window.clearTimeout(realtimeTranscriptionTimerRef.current);
+            }
+            realtimeTranscriptionTimerRef.current = window.setTimeout(() => {
+              stream.getAudioTracks().forEach((track) => {
+                track.enabled = true;
+              });
+              setGuidedAnswerAudioError('Não consegui concluir essa resposta. Pode falar novamente.');
+              setRealtimeVoiceStatus('listening');
+              realtimeTranscriptionTimerRef.current = null;
+            }, 12_000);
+          }
+        }
+
+        realtimeVadFrameRef.current = window.requestAnimationFrame(monitorLocalSilence);
+      };
+      realtimeVadFrameRef.current = window.requestAnimationFrame(monitorLocalSilence);
+
       dataChannel.onopen = () => {
         sendRealtimeEvent({
           type: 'session.update',
@@ -1664,14 +1742,7 @@ export default function Home() {
               input: {
                 transcription: { model: 'gpt-4o-mini-transcribe', language: 'pt' },
                 noise_reduction: { type: 'far_field' },
-                turn_detection: {
-                  type: 'server_vad',
-                  threshold: 0.65,
-                  prefix_padding_ms: 300,
-                  silence_duration_ms: 700,
-                  create_response: false,
-                  interrupt_response: true,
-                },
+                turn_detection: null,
               },
               output: { voice: 'marin' },
             },
@@ -2718,7 +2789,7 @@ export default function Home() {
 
                           {currentCompanyGuidedQuestion && !generatingCompanyGuidedQuestion && !generatingCompanyGuidedClarification && !generatingCompanyGuidedOpening && (
                             <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/90 p-3">
-                              {realtimeVoiceActive ? (
+                              {REALTIME_VOICE_ENABLED && realtimeVoiceActive ? (
                                 <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-violet-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
                                   <div className="flex min-w-0 items-center gap-3">
                                     <div className="relative flex h-12 w-12 shrink-0 items-center justify-center">
@@ -2759,7 +2830,7 @@ export default function Home() {
                                   </button>
                                 </div>
                               ) : (
-                                <div className="mb-3 grid grid-cols-2 gap-2">
+                                <div className="mb-3 grid grid-cols-1 gap-2">
                                   <button
                                     type="button"
                                     onClick={() => document.getElementById('bella-guided-answer')?.focus()}
@@ -2768,15 +2839,17 @@ export default function Home() {
                                     <MessageCircle size={17} />
                                     Escrever
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => void startRealtimeVoice()}
-                                    disabled={transcribingGuidedAnswer}
-                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-emerald-400 hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    <Mic size={17} />
-                                    Conversar por voz
-                                  </button>
+                                  {REALTIME_VOICE_ENABLED && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void startRealtimeVoice()}
+                                      disabled={transcribingGuidedAnswer}
+                                      className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-emerald-400 hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      <Mic size={17} />
+                                      Conversar por voz
+                                    </button>
+                                  )}
                                 </div>
                               )}
                               <textarea

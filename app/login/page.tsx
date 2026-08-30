@@ -81,6 +81,7 @@ export default function LoginPage() {
         <button type="submit" disabled={submitting} className="mt-6 w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70">
           {submitting ? 'Entrando...' : 'Entrar'}
         </button>
+        <div className="mt-5 flex justify-between text-sm text-slate-400"><a href="/forgot-password">Esqueci minha senha</a><a href="/signup">Criar conta</a></div>
       </form>
     </main>
   );

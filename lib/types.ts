@@ -428,3 +428,22 @@ export type Settings = {
   last_deploy: string;
   environment: 'produção';
 };
+
+export type AccountOverview = {
+  company: {
+    id: string;
+    name: string;
+    plan: 'TRIAL' | 'STARTER' | 'PRO' | 'BUSINESS';
+    subscriptionStatus: 'TRIALING' | 'PENDING_PAYMENT' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
+    trialEndsAt: string | null;
+    canceledAt: string | null;
+    deletionRequestedAt: string | null;
+    teamMemberLimit: number;
+    users: Array<{ id: string; name: string; email: string; status: string; createdAt: string }>;
+    invitations: Array<{ id: string; email: string; expiresAt: string; createdAt: string }>;
+  };
+  usage: {
+    periodStart: string;
+    metrics: Record<string, { used: number; limit: number }>;
+  };
+};

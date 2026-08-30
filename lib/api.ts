@@ -31,6 +31,7 @@ import type {
   SimulationLog,
   WhatsAppDisconnectEvent,
   WhatsAppStatus,
+  AccountOverview,
 } from './types';
 
 const DEFAULT_BACKEND_API_URL = 'http://localhost:3000/api';
@@ -217,6 +218,15 @@ export async function setupPassword(token: string, password: string) {
   }
 
   return { success: true };
+}
+
+export async function resetPassword(token: string, password: string) {
+  try {
+    await apiRequest('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Link inválido ou expirado.' };
+  }
 }
 
 export async function getAuthState() {
@@ -628,3 +638,16 @@ export async function updateSettings(data: Settings): Promise<Settings> {
     body: JSON.stringify(data),
   });
 }
+
+export async function getAccountOverview(): Promise<AccountOverview> { return apiRequest('/account'); }
+export async function selectAccountPlan(plan: 'TRIAL' | 'STARTER' | 'PRO' | 'BUSINESS') {
+  return apiRequest('/account/plan', { method: 'PATCH', body: JSON.stringify({ plan }) });
+}
+export async function inviteTeamMember(name: string, email: string) {
+  return apiRequest<{ setupLink: string }>('/account/invitations', { method: 'POST', body: JSON.stringify({ name, email }) });
+}
+export async function cancelSubscription() { return apiRequest('/account/cancel', { method: 'POST', body: '{}' }); }
+export async function requestAccountDeletion(confirmation: string) {
+  return apiRequest('/account', { method: 'DELETE', body: JSON.stringify({ confirmation }) });
+}
+export async function exportAccountData() { return apiRequest<Record<string, unknown>>('/account/export'); }

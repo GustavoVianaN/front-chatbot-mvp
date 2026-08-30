@@ -84,6 +84,13 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
             </div>
           </div>
         </div>
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 sm:rounded-3xl sm:p-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Conta e privacidade</p>
+          <h3 className="mt-3 text-lg font-semibold text-white">Plano, equipe e seus dados</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-400">Veja consumo, gerencie membros, exporte dados ou solicite cancelamento e exclusão.</p>
+          <a href="/account" className="mt-5 inline-flex rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/20">Gerenciar conta</a>
+          <div className="mt-4 flex gap-4 text-xs text-slate-500"><a href="/legal/terms">Termos</a><a href="/legal/privacy">Privacidade</a></div>
+        </div>
       </div>
     </div>
   );

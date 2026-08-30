@@ -3,11 +3,12 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { setupPassword } from '@/lib/api';
+import { resetPassword, setupPassword } from '@/lib/api';
 
 function SetupPasswordForm() {
   const searchParams = useSearchParams();
   const token = useMemo(() => searchParams.get('token') || '', [searchParams]);
+  const resetMode = searchParams.get('mode') === 'reset';
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -23,8 +24,8 @@ function SetupPasswordForm() {
       return;
     }
 
-    if (password.length < 8) {
-      setError('A senha precisa ter pelo menos 8 caracteres.');
+    if (password.length < 10) {
+      setError('A senha precisa ter pelo menos 10 caracteres.');
       return;
     }
 
@@ -34,7 +35,7 @@ function SetupPasswordForm() {
     }
 
     setSubmitting(true);
-    const result = await setupPassword(token, password);
+    const result = resetMode ? await resetPassword(token, password) : await setupPassword(token, password);
     setSubmitting(false);
 
     if (!result.success) {
@@ -48,8 +49,8 @@ function SetupPasswordForm() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
       <form onSubmit={handleSubmit} className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/90 p-8 shadow-panel">
-        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Primeiro acesso</p>
-        <h1 className="mt-3 text-3xl font-semibold text-white">Definir senha</h1>
+        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{resetMode ? 'Recuperação de acesso' : 'Primeiro acesso'}</p>
+        <h1 className="mt-3 text-3xl font-semibold text-white">{resetMode ? 'Criar nova senha' : 'Definir senha'}</h1>
 
         {success ? (
           <div className="mt-8 space-y-5">
