@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   cancelSubscription,
+  createCheckoutSession,
   exportAccountData,
   getAccountOverview,
   getPlans,
@@ -46,6 +47,15 @@ export default function AccountPage() {
     await selectAccountPlan(value);
     setNotice('Solicitação registrada. Veja abaixo como concluir o pagamento.');
     await load();
+  }
+
+  async function payWithCard(value: 'STARTER' | 'PRO' | 'BUSINESS') {
+    try {
+      const { url } = await createCheckoutSession(value);
+      window.location.href = url;
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Não foi possível iniciar o pagamento por cartão.');
+    }
   }
 
   async function invite() {
@@ -106,39 +116,57 @@ export default function AccountPage() {
           )}
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {plans.map((p) => (
-              <button
-                key={p.plan}
-                type="button"
-                onClick={() => void plan(p.plan)}
-                disabled={data.company.plan === p.plan && data.company.subscriptionStatus === 'ACTIVE'}
-                className={`rounded-2xl border p-5 text-left transition ${
-                  data.company.plan === p.plan
-                    ? 'border-emerald-500 bg-emerald-500/10'
-                    : 'border-slate-700 hover:border-emerald-500'
-                } disabled:cursor-not-allowed disabled:opacity-70`}
-              >
-                <strong className="text-lg">{p.label}</strong>
-                <p className="mt-1 text-xs leading-5 text-slate-400">{p.tagline}</p>
-                <p className="mt-3 text-2xl font-semibold">
-                  {formatBrl(p.monthlyPriceBrl)}
-                  <span className="text-sm font-normal text-slate-400">/mês</span>
-                </p>
-                <p className="mt-1 text-xs text-slate-500">+ {formatBrl(p.setupFeeBrl)} de implantação (única vez)</p>
-                <ul className="mt-3 space-y-1 text-xs text-slate-300">
-                  {p.highlights.map((h) => <li key={h}>• {h}</li>)}
-                </ul>
-                <p className="mt-4 text-xs font-semibold text-emerald-300">
-                  {data.company.plan === p.plan && data.company.subscriptionStatus === 'ACTIVE' ? 'Plano atual' : 'Selecionar este plano'}
-                </p>
-              </button>
-            ))}
+            {plans.map((p) => {
+              const isCurrentActivePlan = data.company.plan === p.plan && data.company.subscriptionStatus === 'ACTIVE';
+              return (
+                <div
+                  key={p.plan}
+                  className={`rounded-2xl border p-5 ${
+                    data.company.plan === p.plan ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700'
+                  }`}
+                >
+                  <strong className="text-lg">{p.label}</strong>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">{p.tagline}</p>
+                  <p className="mt-3 text-2xl font-semibold">
+                    {formatBrl(p.monthlyPriceBrl)}
+                    <span className="text-sm font-normal text-slate-400">/mês</span>
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">+ {formatBrl(p.setupFeeBrl)} de implantação (única vez)</p>
+                  <ul className="mt-3 space-y-1 text-xs text-slate-300">
+                    {p.highlights.map((h) => <li key={h}>• {h}</li>)}
+                  </ul>
+
+                  {isCurrentActivePlan ? (
+                    <p className="mt-4 text-xs font-semibold text-emerald-300">Plano atual</p>
+                  ) : (
+                    <div className="mt-4 space-y-2">
+                      {p.cardPaymentAvailable && (
+                        <button
+                          type="button"
+                          onClick={() => void payWithCard(p.plan)}
+                          className="w-full rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
+                        >
+                          Pagar com cartão
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void plan(p.plan)}
+                        className="w-full rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 hover:border-emerald-500 hover:text-white"
+                      >
+                        {p.cardPaymentAvailable ? 'Pagar manualmente (PIX)' : 'Selecionar este plano'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <p className="mt-5 text-xs text-amber-200">
-            Valores de rascunho, sujeitos a ajuste. A cobrança automática ainda depende da
-            conexão de um provedor de pagamento — até lá, a ativação é confirmada manualmente
-            pela nossa equipe após o pagamento.
+            Valores de rascunho, sujeitos a ajuste. Quando disponível, o pagamento por cartão
+            ativa o plano automaticamente; o pagamento manual (PIX) é confirmado pela nossa
+            equipe após o recebimento.
           </p>
         </section>
 

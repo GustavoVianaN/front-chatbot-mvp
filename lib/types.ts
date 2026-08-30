@@ -468,4 +468,5 @@ export type PlanCatalogItem = {
     contacts: number;
     members: number;
   };
+  cardPaymentAvailable: boolean;
 };

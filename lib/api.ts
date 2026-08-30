@@ -645,6 +645,9 @@ export async function getAccountOverview(): Promise<AccountOverview> { return ap
 export async function selectAccountPlan(plan: 'TRIAL' | 'STARTER' | 'PRO' | 'BUSINESS') {
   return apiRequest('/account/plan', { method: 'PATCH', body: JSON.stringify({ plan }) });
 }
+export async function createCheckoutSession(plan: 'STARTER' | 'PRO' | 'BUSINESS') {
+  return apiRequest<{ url: string }>('/account/checkout-session', { method: 'POST', body: JSON.stringify({ plan }) });
+}
 export async function inviteTeamMember(name: string, email: string) {
   return apiRequest<{ setupLink: string }>('/account/invitations', { method: 'POST', body: JSON.stringify({ name, email }) });
 }
