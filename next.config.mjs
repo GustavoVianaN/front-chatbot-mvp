@@ -39,6 +39,7 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   experimental: {
     serverActions: {
       bodySizeLimit: '8mb',

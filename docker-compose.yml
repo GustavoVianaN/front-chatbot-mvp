@@ -1,0 +1,20 @@
+services:
+  bella-frontend:
+    build: .
+    container_name: bella-frontend
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
+      BACKEND_API_URL: ${BACKEND_API_URL:-http://host.docker.internal:3000/api}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${FRONTEND_PORT:-3001}:3001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3001/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
