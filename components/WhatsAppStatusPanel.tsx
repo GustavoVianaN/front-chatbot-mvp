@@ -125,7 +125,12 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+        {/*
+          Card "API oficial Meta" comentado por hora — por decisão do
+          produto, nesta fase só o canal WhatsApp Web (Baileys) é usado.
+          Código mantido intacto para reativar depois: descomente o bloco
+          abaixo e volte o grid para `xl:grid-cols-2`.
+
           <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -150,7 +155,8 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
               ))}
             </div>
           </div>
-
+        */}
+        <div className="mt-6 grid gap-4">
           <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
