@@ -444,6 +444,28 @@ export type AccountOverview = {
   };
   usage: {
     periodStart: string;
+    plan: 'TRIAL' | 'STARTER' | 'PRO' | 'BUSINESS';
+    requestedPlan: 'STARTER' | 'PRO' | 'BUSINESS' | null;
+    subscriptionStatus: 'TRIALING' | 'PENDING_PAYMENT' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
+    trialEndsAt: string | null;
+    paymentInstructions: string;
     metrics: Record<string, { used: number; limit: number }>;
+  };
+};
+
+export type PlanCatalogItem = {
+  plan: 'STARTER' | 'PRO' | 'BUSINESS';
+  label: string;
+  tagline: string;
+  monthlyPriceBrl: number;
+  setupFeeBrl: number;
+  highlights: string[];
+  limits: {
+    messages: number;
+    aiTokens: number;
+    audioMinutes: number;
+    storageMb: number;
+    contacts: number;
+    members: number;
   };
 };

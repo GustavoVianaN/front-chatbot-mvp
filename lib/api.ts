@@ -32,6 +32,7 @@ import type {
   WhatsAppDisconnectEvent,
   WhatsAppStatus,
   AccountOverview,
+  PlanCatalogItem,
 } from './types';
 
 const DEFAULT_BACKEND_API_URL = 'http://localhost:3000/api';
@@ -639,6 +640,7 @@ export async function updateSettings(data: Settings): Promise<Settings> {
   });
 }
 
+export async function getPlans(): Promise<PlanCatalogItem[]> { return apiRequest('/plans'); }
 export async function getAccountOverview(): Promise<AccountOverview> { return apiRequest('/account'); }
 export async function selectAccountPlan(plan: 'TRIAL' | 'STARTER' | 'PRO' | 'BUSINESS') {
   return apiRequest('/account/plan', { method: 'PATCH', body: JSON.stringify({ plan }) });
