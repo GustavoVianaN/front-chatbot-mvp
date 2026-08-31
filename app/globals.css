@@ -270,3 +270,108 @@ select {
   color: #0f172a;
   border-color: #a7f3d0;
 }
+
+/* Landing /welcome: movimentos curtos, executados uma única vez. */
+@keyframes landingEnterUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes landingEnterMockup {
+  from { opacity: 0; transform: translateX(20px) scale(.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.landing-navbar {
+  animation: landingEnterUp 450ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.landing-enter {
+  animation: landingEnterUp 520ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.landing-enter-eyebrow { animation-delay: 200ms; }
+.landing-enter-title { animation-delay: 300ms; }
+.landing-enter-copy { animation-delay: 430ms; }
+.landing-enter-actions { animation-delay: 550ms; }
+.landing-enter-proof { animation-delay: 650ms; }
+
+.landing-enter-mockup {
+  animation: landingEnterMockup 650ms cubic-bezier(.22, 1, .36, 1) 360ms both;
+}
+
+.landing-message-enter {
+  animation: landingEnterUp 360ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.landing-message-1 { animation-delay: 760ms; }
+.landing-message-2 { animation-delay: 1080ms; }
+.landing-message-3 { animation-delay: 1400ms; }
+.landing-message-4 { animation-delay: 1720ms; }
+.landing-message-5 { animation-delay: 1980ms; }
+
+.landing-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 500ms cubic-bezier(.22, 1, .36, 1), transform 500ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.landing-reveal[data-visible='true'] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.landing-card {
+  transition: transform 200ms ease-out, border-color 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+.landing-card:hover {
+  transform: translateY(-3px);
+  border-color: #d0d5dd;
+  box-shadow: 0 12px 24px -18px rgba(16, 24, 40, .24);
+}
+
+.landing-card-icon { transition: transform 200ms ease-out; }
+.landing-card:hover .landing-card-icon { transform: scale(1.05); }
+
+.landing-cta {
+  transition: background-color 180ms ease-out, transform 180ms ease-out, box-shadow 180ms ease-out;
+}
+.landing-cta:hover { transform: translateY(-1px); }
+.landing-cta:active { transform: translateY(0) scale(.99); }
+.landing-cta-arrow { transition: transform 180ms ease-out; }
+.landing-cta:hover .landing-cta-arrow { transform: translateX(3px); }
+
+@media (max-width: 767px) {
+  .landing-enter-mockup {
+    animation-name: landingEnterUp;
+    animation-delay: 480ms;
+  }
+  .landing-message-1 { animation-delay: 650ms; }
+  .landing-message-2 { animation-delay: 800ms; }
+  .landing-message-3 { animation-delay: 950ms; }
+  .landing-message-4 { animation-delay: 1100ms; }
+  .landing-message-5 { animation-delay: 1250ms; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-navbar,
+  .landing-enter,
+  .landing-enter-mockup,
+  .landing-message-enter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .landing-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .landing-card,
+  .landing-card-icon,
+  .landing-cta,
+  .landing-cta-arrow {
+    transition: none !important;
+  }
+}

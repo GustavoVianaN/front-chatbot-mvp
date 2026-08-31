@@ -171,12 +171,18 @@ export default function AccountPage() {
         </section>
 
         <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6">
-          <h2 className="text-xl font-semibold">Uso do mês</h2>
+          <h2 className="text-xl font-semibold">{data.company.plan === 'TRIAL' ? 'Uso do teste gratuito' : 'Uso do mês'}</h2>
+          {data.company.plan === 'TRIAL' && (
+            <p className="mt-1 text-xs text-slate-400">
+              Crédito único, sem prazo e sem renovação mensal — ao atingir o limite, escolha um
+              plano para continuar.
+            </p>
+          )}
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {Object.entries(data.usage.metrics).map(([key, v]) => (
               <div key={key}>
                 <div className="flex justify-between text-sm">
-                  <span>{METRIC_LABELS[key] || key}</span>
+                  <span>{data.company.plan === 'TRIAL' && key === 'messages' ? 'Respostas grátis (total)' : METRIC_LABELS[key] || key}</span>
                   <span>{v.used} / {v.limit}</span>
                 </div>
                 <div className="mt-2 h-2 rounded bg-slate-800">

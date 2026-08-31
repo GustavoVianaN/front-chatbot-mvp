@@ -156,8 +156,8 @@ Quando faltar informação confirmada sobre produto, preço, prazo, modelo ou di
 Não invente preços, prazos, disponibilidade, políticas ou promessas comerciais.`;
 const onboardingBellaGuideMessages: Record<number, { title: string; body: string }> = {
   1: {
-    title: 'Vamos começar pela empresa: informe o nome e o segmento do negócio.',
-    body: 'Isso ajuda a IA a entender sobre quem ela está falando.',
+    title: 'Vamos começar pela sua empresa.',
+    body: 'Informe o nome e o segmento do negócio.',
   },
   2: {
     title: 'Agora escolha o nome do assistente.',
@@ -2461,7 +2461,7 @@ export default function Home() {
 
   if (onboardingMode !== 'hidden' && dashboard && botConfig) {
     return (
-      <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 lg:px-10">
+      <main className="min-h-screen bg-[#020817] px-3 py-4 text-[#F8FAFC] sm:px-6 sm:py-6 lg:px-10">
         {onboardingMode === 'finishing' ? (
           <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-3xl items-center justify-center">
             <div className="w-full rounded-2xl border border-slate-800 bg-slate-900/95 p-6 text-center shadow-2xl sm:rounded-3xl sm:p-10">
@@ -2551,20 +2551,19 @@ export default function Home() {
             </div>
           </section>
         ) : (
-          <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl items-center justify-center">
-            <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/95 shadow-2xl sm:rounded-3xl">
-              <div className="border-b border-slate-800 p-5 sm:p-6">
+          <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl items-center justify-center">
+            <div className="w-full overflow-hidden rounded-2xl border border-[#26344D] bg-[#0F172A] shadow-[0_20px_60px_-40px_rgba(0,0,0,.75)] sm:rounded-3xl">
+              <div className="border-b border-[#26344D] px-5 py-6 sm:px-8 sm:py-7 lg:px-10">
                 {showOnboardingHeaderBella && (
-                  <div className="mb-5 flex items-start gap-4 rounded-2xl border border-emerald-400/20 bg-slate-950/70 p-4">
-                    <div className="bella-guide-avatar flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/30">
+                  <div className="mb-6 flex max-w-3xl items-center gap-3 rounded-xl bg-[#111C32] px-3 py-3 sm:px-4">
+                    <div className="bella-guide-avatar flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
                       <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
                     </div>
-                    <div className="relative max-w-2xl rounded-2xl border border-emerald-400/30 bg-slate-900 px-4 py-3">
-                      <span className="absolute left-[-7px] top-6 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/30 bg-slate-900" />
+                    <div className="min-w-0 px-1">
                       <TypewriterText
                         key={`bella-guide-title-${onboardingStep}`}
                         text={onboardingBellaGuide.title}
-                        className="text-sm font-semibold text-white"
+                        className="text-sm font-semibold text-[#F8FAFC]"
                         onComplete={() => setShowSecondBellaText(true)}
                       />
 
@@ -2573,69 +2572,78 @@ export default function Home() {
                           key={`bella-guide-body-${onboardingStep}`}
                           text={onboardingBellaGuide.body}
                           speed={25}
-                          className="mt-1 text-sm leading-6 text-slate-300"
+                          className="mt-0.5 text-sm leading-5 text-[#94A3B8]"
                         />
                       )}
                     </div>
                   </div>
                 )}
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.22em] text-emerald-300">Passo {onboardingStep} de {onboardingTotalSteps}</p>
-                    <h1 className="mt-2 text-2xl font-semibold text-white">
+                <div>
+                  <div className="flex items-center justify-between gap-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#6EE7B7]">Passo {onboardingStep} de {onboardingTotalSteps}</p>
+                    <p className="text-xs font-medium text-[#94A3B8]">{onboardingProgress}</p>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#1E293B]">
+                    <div className="h-full rounded-full bg-[#10B981] transition-all" style={{ width: onboardingProgress }} />
+                  </div>
+                  <div className="mt-5">
+                    <h1 className="text-2xl font-semibold tracking-[-0.025em] text-[#F8FAFC] sm:text-3xl">
                       {onboardingStep === 1 && 'Empresa'}
                       {onboardingStep === 2 && 'Nome do assistente'}
                       {onboardingStep === 3 && 'Ensine sua IA sobre sua empresa'}
                       {onboardingStep === 4 && 'Estilo de atendimento'}
                       {onboardingStep === 5 && 'Revisão final'}
                     </h1>
+                    {onboardingStep === 1 && (
+                      <p className="mt-2 text-sm leading-6 text-[#94A3B8]">Informe os dados básicos para a Bella reconhecer seu negócio.</p>
+                    )}
                     {onboardingStep === 2 && (
-                      <p className="mt-2 text-sm leading-6 text-slate-400">Esse será o nome que aparecerá para seus clientes.</p>
+                      <p className="mt-2 text-sm leading-6 text-[#94A3B8]">Esse será o nome que aparecerá para seus clientes.</p>
                     )}
                     {onboardingStep === 3 && (
-                      <p className="mt-2 text-sm leading-6 text-slate-400">Converse com a Bella por texto ou áudio. Ela vai organizar as informações para você.</p>
+                      <p className="mt-2 text-sm leading-6 text-[#94A3B8]">Converse com a Bella por texto ou áudio. Ela vai organizar as informações para você.</p>
                     )}
-                  </div>
-                  <div className="min-w-[180px]">
-                    <div className="h-3 overflow-hidden rounded-full bg-slate-800">
-                      <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: onboardingProgress }} />
-                    </div>
-                    <p className="mt-2 text-right text-xs text-slate-500">{onboardingProgress}</p>
+                    {onboardingStep === 4 && (
+                      <p className="mt-2 text-sm leading-6 text-[#94A3B8]">Defina como a Bella deve conversar com seus clientes.</p>
+                    )}
+                    {onboardingStep === 5 && (
+                      <p className="mt-2 text-sm leading-6 text-[#94A3B8]">Revise as escolhas antes de concluir a configuração.</p>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div className="p-5 sm:p-6">
+              <div className="min-h-[350px] px-5 py-7 sm:px-8 sm:py-9 lg:px-10">
                 {onboardingStep === 1 && (
-                  <div className="mx-auto max-w-2xl space-y-5">
-                    <label className="space-y-2 text-sm font-medium text-slate-300">
+                  <div className="mx-auto max-w-3xl space-y-6">
+                    <label className="space-y-2.5 text-[15px] font-medium text-[#CBD5E1]">
                       Nome da empresa
                       <input
                         value={onboardingDraft.company_name}
                         onChange={(event) => updateOnboardingDraft('company_name', event.target.value)}
-                        className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                        className="min-h-14 w-full rounded-xl border border-[#26344D] bg-[#080F20] px-4 py-3 text-base text-[#F8FAFC] outline-none transition focus:border-[#10B981] focus:ring-2 focus:ring-[#10B981]/10"
                       />
                     </label>
-                    <label className="space-y-2 text-sm font-medium text-slate-300">
+                    <label className="space-y-2.5 text-[15px] font-medium text-[#CBD5E1]">
                       Segmento
                       <input
                         value={onboardingDraft.segment}
                         onChange={(event) => updateOnboardingDraft('segment', event.target.value)}
-                        className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                        className="min-h-14 w-full rounded-xl border border-[#26344D] bg-[#080F20] px-4 py-3 text-base text-[#F8FAFC] outline-none transition focus:border-[#10B981] focus:ring-2 focus:ring-[#10B981]/10"
                       />
                     </label>
                   </div>
                 )}
 
                 {onboardingStep === 2 && (
-                  <div className="mx-auto max-w-2xl space-y-5">
+                  <div className="mx-auto max-w-3xl space-y-6">
                     <div className="grid gap-3 sm:grid-cols-3">
                       {['Atendente', 'Ana', 'Assistente'].map((name) => (
                         <button
                           key={name}
                           type="button"
                           onClick={() => updateOnboardingDraft('assistant_name', name)}
-                          className={`min-h-14 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${onboardingDraft.assistant_name === name ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-700 bg-slate-950/80 text-slate-300 hover:border-slate-500 hover:text-white'}`}
+                          className={`min-h-14 rounded-xl border px-4 py-3 text-sm font-semibold transition ${onboardingDraft.assistant_name === name ? 'border-[#10B981] bg-[#10B981]/10 text-[#6EE7B7]' : 'border-[#26344D] bg-[#080F20] text-[#CBD5E1] hover:border-[#475569] hover:text-white'}`}
                         >
                           {name}
                         </button>
@@ -2647,40 +2655,39 @@ export default function Home() {
                         value={onboardingDraft.assistant_name}
                         onChange={(event) => updateOnboardingDraft('assistant_name', event.target.value)}
                         placeholder="Ex: Sofia, Lucas, Recepção"
-                        className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                        className="min-h-14 w-full rounded-xl border border-[#26344D] bg-[#080F20] px-4 py-3 text-base text-[#F8FAFC] outline-none transition focus:border-[#10B981] focus:ring-2 focus:ring-[#10B981]/10"
                       />
                     </label>
                   </div>
                 )}
 
                 {onboardingStep === 3 && (
-                  <div className="mx-auto w-full max-w-4xl">
+                  <div className="mx-auto w-full max-w-5xl">
                     <div className="space-y-4">
 
                       {canShowCompanyGuidedQuestions && (
-                        <div className="rounded-2xl border border-emerald-500/20 bg-slate-950/80 p-4">
-                          <div className="mb-3 flex items-center justify-between gap-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Conversa com a Bella</p>
-                            <p className={`text-xs font-semibold ${companyGuidedMinimumComplete ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        <div className="rounded-2xl bg-[#080F20] p-4 sm:p-5">
+                          <div className="mb-5 flex items-center justify-between gap-3 border-b border-[#26344D] pb-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6EE7B7]">Bella</p>
+                            <p className={`text-xs font-medium ${companyGuidedMinimumComplete ? 'text-[#6EE7B7]' : 'text-[#94A3B8]'}`}>
                               {companyGuidedMinimumComplete
-                                ? 'Já dá pra continuar quando quiser'
-                                : `Mais ${minimumCompanyGuidedAnswers - answeredCompanyGuidedCount} resposta${minimumCompanyGuidedAnswers - answeredCompanyGuidedCount === 1 ? '' : 's'} e seguimos em frente`}
+                                ? 'Você já pode continuar'
+                                : `${minimumCompanyGuidedAnswers - answeredCompanyGuidedCount} pergunta${minimumCompanyGuidedAnswers - answeredCompanyGuidedCount === 1 ? '' : 's'} restante${minimumCompanyGuidedAnswers - answeredCompanyGuidedCount === 1 ? '' : 's'}`}
                             </p>
                           </div>
-                          <div ref={companyGuidedScrollRef} className="max-h-[430px] space-y-4 overflow-y-auto pr-1">
+                          <div ref={companyGuidedScrollRef} className="max-h-[430px] space-y-5 overflow-y-auto pr-1">
                             {companyGuidedConversation.map((message) => (
                               <div key={message.question.id} className="space-y-3">
                                 <div className="flex items-start gap-3">
-                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/30">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
                                     <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
                                   </div>
-                                  <div className="relative flex-1 rounded-2xl border border-emerald-400/25 bg-slate-900 px-4 py-3">
-                                    <span className="absolute left-[-7px] top-5 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/25 bg-slate-900" />
-                                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Bella</p>
-                                    <p className="mt-2 text-sm leading-6 text-slate-300">{message.questionText}</p>
+                                  <div className="relative flex-1 rounded-xl bg-[#111C32] px-4 py-3.5">
+                                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#6EE7B7]">Bella</p>
+                                    <p className="mt-2 text-sm leading-6 text-[#CBD5E1]">{message.questionText}</p>
                                   </div>
                                 </div>
-                                <div className="ml-auto max-w-[88%] rounded-2xl border border-slate-700 bg-emerald-600 px-4 py-3 text-sm leading-6 text-white">
+                                <div className="ml-auto max-w-[88%] rounded-xl border border-[#26344D] bg-[#111C32] px-4 py-3 text-sm leading-6 text-[#F8FAFC]">
                                   {message.answer}
                                 </div>
                               </div>
@@ -2688,12 +2695,11 @@ export default function Home() {
 
                             {generatingCompanyGuidedQuestion ? (
                               <div className="flex items-start gap-3">
-                                <div className="bella-guide-avatar flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/30">
+                                <div className="bella-guide-avatar flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
                                   <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
                                 </div>
-                                <div className="relative flex-1 rounded-2xl border border-emerald-400/30 bg-slate-900 px-4 py-3">
-                                  <span className="absolute left-[-7px] top-5 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/30 bg-slate-900" />
-                                  <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
+                                <div className="relative flex-1 rounded-xl bg-[#111C32] px-4 py-3.5">
+                                  <div className="flex items-center gap-2 text-sm font-semibold text-[#94A3B8]">
                                     <RefreshCw size={14} className="animate-spin" />
                                     Bella está pensando na próxima pergunta...
                                   </div>
@@ -2701,12 +2707,11 @@ export default function Home() {
                               </div>
                             ) : generatingCompanyGuidedOpening ? (
                               <div className="flex items-start gap-3">
-                                <div className="bella-guide-avatar flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/30">
+                                <div className="bella-guide-avatar flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
                                   <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
                                 </div>
-                                <div className="relative flex-1 rounded-2xl border border-emerald-400/30 bg-slate-900 px-4 py-3">
-                                  <span className="absolute left-[-7px] top-5 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/30 bg-slate-900" />
-                                  <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
+                                <div className="relative flex-1 rounded-xl bg-[#111C32] px-4 py-3.5">
+                                  <div className="flex items-center gap-2 text-sm font-semibold text-[#94A3B8]">
                                     <RefreshCw size={14} className="animate-spin" />
                                     Bella está preparando a conversa...
                                   </div>
@@ -2714,17 +2719,16 @@ export default function Home() {
                               </div>
                             ) : currentCompanyGuidedQuestion ? (
                               <div className="flex items-start gap-3">
-                                <div className="bella-guide-avatar flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-950/30">
+                                <div className="bella-guide-avatar flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
                                   <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
                                 </div>
-                                <div className="relative flex-1 rounded-2xl border border-emerald-400/30 bg-slate-900 px-4 py-3">
-                                  <span className="absolute left-[-7px] top-5 h-3.5 w-3.5 rotate-45 border-b border-l border-emerald-400/30 bg-slate-900" />
-                                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Bella</p>
+                                <div className="relative flex-1 rounded-xl bg-[#111C32] px-4 py-3.5">
+                                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#6EE7B7]">Bella</p>
                                   <TypewriterText
                                     key={`guided-question-body-${currentCompanyGuidedQuestion.id}`}
                                     text={getCompanyGuidedQuestionText(currentCompanyGuidedQuestion)}
                                     speed={18}
-                                    className="mt-2 text-sm leading-6 text-slate-300"
+                                    className="mt-2 text-sm leading-6 text-[#CBD5E1]"
                                   />
                                 </div>
                               </div>
@@ -2756,7 +2760,7 @@ export default function Home() {
 
                             {currentCompanyGuidedQuestion && (companyGuidedClarifications[currentCompanyGuidedQuestion.id] || []).map((exchange, index) => (
                               <div key={`guided-clarify-${currentCompanyGuidedQuestion.id}-${index}`} className="space-y-3">
-                                <div className="ml-auto max-w-[88%] rounded-2xl border border-slate-700 bg-emerald-600 px-4 py-3 text-sm leading-6 text-white">
+                                <div className="ml-auto max-w-[88%] rounded-xl border border-[#26344D] bg-[#111C32] px-4 py-3 text-sm leading-6 text-[#F8FAFC]">
                                   {exchange.userText}
                                 </div>
                                 <div className="flex items-start gap-3">
@@ -2788,7 +2792,7 @@ export default function Home() {
                           </div>
 
                           {currentCompanyGuidedQuestion && !generatingCompanyGuidedQuestion && !generatingCompanyGuidedClarification && !generatingCompanyGuidedOpening && (
-                            <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/90 p-3">
+                            <div className="mt-5 border-t border-[#26344D] pt-4">
                               {REALTIME_VOICE_ENABLED && realtimeVoiceActive ? (
                                 <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-violet-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
                                   <div className="flex min-w-0 items-center gap-3">
@@ -2830,24 +2834,28 @@ export default function Home() {
                                   </button>
                                 </div>
                               ) : (
-                                <div className="mb-3 grid grid-cols-1 gap-2">
+                                <div className="mb-3 flex items-center gap-2" role="tablist" aria-label="Forma de resposta">
                                   <button
                                     type="button"
+                                    role="tab"
+                                    aria-selected="true"
                                     onClick={() => document.getElementById('bella-guided-answer')?.focus()}
-                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500/25"
+                                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#10B981] bg-[#10B981]/10 px-4 py-2 text-sm font-semibold text-[#6EE7B7] transition hover:bg-[#10B981]/15"
                                   >
                                     <MessageCircle size={17} />
-                                    Escrever
+                                    Texto
                                   </button>
                                   {REALTIME_VOICE_ENABLED && (
                                     <button
                                       type="button"
                                       onClick={() => void startRealtimeVoice()}
                                       disabled={transcribingGuidedAnswer}
-                                      className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-emerald-400 hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                                      role="tab"
+                                      aria-selected="false"
+                                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#26344D] bg-transparent px-4 py-2 text-sm font-semibold text-[#94A3B8] transition hover:border-[#475569] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                       <Mic size={17} />
-                                      Conversar por voz
+                                      Áudio
                                     </button>
                                   )}
                                 </div>
@@ -2873,20 +2881,20 @@ export default function Home() {
                                       ? 'Transcrevendo sua resposta...'
                                       : 'Escreva sua resposta para a Bella...'
                                 }
-                                className={`w-full resize-none border-0 bg-transparent px-1 py-1 text-sm leading-6 text-white outline-none placeholder:text-slate-500 disabled:opacity-60 ${realtimeVoiceActive ? 'hidden' : ''}`}
+                                className={`min-h-[132px] w-full resize-none rounded-xl border border-[#26344D] bg-[#080F20] px-4 py-3 text-base leading-6 text-[#F8FAFC] outline-none transition placeholder:text-[#64748B] focus:border-[#10B981] focus:ring-2 focus:ring-[#10B981]/10 disabled:opacity-60 ${realtimeVoiceActive ? 'hidden' : ''}`}
                               />
                               {!realtimeVoiceActive && guidedAnswerAudioError && (
                                 <p className="mt-1 text-xs leading-5 text-rose-300">{guidedAnswerAudioError}</p>
                               )}
-                              <div className={realtimeVoiceActive ? 'hidden' : 'mt-2 flex justify-end'}>
+                              <div className={realtimeVoiceActive ? 'hidden' : 'mt-3 flex justify-end'}>
                                 <div className="flex shrink-0 items-center gap-2">
                                   <button
                                     type="button"
                                     onClick={() => void handleAddCompanyGuidedAnswer()}
                                     disabled={recordingGuidedAnswer || transcribingGuidedAnswer || guidedAnswerHandsFree || realtimeVoiceActive}
-                                    className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#059669] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:bg-[#334155] disabled:text-[#94A3B8]"
                                   >
-                                    Enviar
+                                    Enviar <ArrowRight size={15} />
                                   </button>
                                 </div>
                               </div>
@@ -3125,14 +3133,14 @@ export default function Home() {
                 )}
 
                 {onboardingStep === 4 && (
-                  <div className="mx-auto max-w-2xl space-y-5">
+                  <div className="mx-auto max-w-3xl space-y-6">
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {toneOptions.map((tone) => (
                         <button
                           key={tone}
                           type="button"
                           onClick={() => updateOnboardingDraft('tone', tone)}
-                          className={`min-h-14 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${onboardingDraft.tone === tone ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-700 bg-slate-950/80 text-slate-300 hover:border-slate-500 hover:text-white'}`}
+                          className={`min-h-14 rounded-xl border px-4 py-3 text-sm font-semibold transition ${onboardingDraft.tone === tone ? 'border-[#10B981] bg-[#10B981]/10 text-[#6EE7B7]' : 'border-[#26344D] bg-[#080F20] text-[#CBD5E1] hover:border-[#475569] hover:text-white'}`}
                         >
                           {tone}
                         </button>
@@ -3164,7 +3172,7 @@ export default function Home() {
                           key={length}
                           type="button"
                           onClick={() => updateOnboardingDraft('response_length', length)}
-                          className={`min-h-14 rounded-2xl border px-4 py-3 text-sm font-semibold capitalize transition ${onboardingDraft.response_length === length ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-700 bg-slate-950/80 text-slate-300 hover:border-slate-500 hover:text-white'}`}
+                          className={`min-h-14 rounded-xl border px-4 py-3 text-sm font-semibold capitalize transition ${onboardingDraft.response_length === length ? 'border-[#10B981] bg-[#10B981]/10 text-[#6EE7B7]' : 'border-[#26344D] bg-[#080F20] text-[#CBD5E1] hover:border-[#475569] hover:text-white'}`}
                         >
                           {length}
                         </button>
@@ -3175,7 +3183,7 @@ export default function Home() {
                 )}
 
                 {onboardingStep === 5 && (
-                  <div className="mx-auto max-w-2xl space-y-4">
+                  <div className="mx-auto max-w-3xl space-y-4">
                     {[
                       ['Empresa', onboardingDraft.company_name || 'Não informado'],
                       ['Segmento', onboardingDraft.segment || 'Não informado'],
@@ -3261,11 +3269,11 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="flex flex-col-reverse gap-3 border-t border-slate-800 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <div className="flex flex-col-reverse gap-3 border-t border-[#26344D] bg-[#0F172A] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
                 <button
                   type="button"
                   onClick={() => onboardingStep === 1 ? setOnboardingMode('welcome') : setOnboardingStep((current) => Math.max(1, current - 1))}
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
+                  className="inline-flex min-h-[52px] items-center justify-center rounded-xl border border-[#26344D] bg-transparent px-6 py-3 text-sm font-semibold text-[#CBD5E1] transition hover:border-[#475569] hover:text-white"
                 >
                   Voltar
                 </button>
@@ -3275,7 +3283,7 @@ export default function Home() {
                       type="button"
                       onClick={() => void handleNextOnboardingStep()}
                       disabled={companyIntakeNeedsProcessing}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                      className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-[#059669] px-8 py-3 text-sm font-semibold text-white transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:bg-[#334155] disabled:text-[#94A3B8]"
                     >
                       {companyIntakeNeedsProcessing ? 'Processando empresa...' : 'Continuar'}
                       {companyIntakeNeedsProcessing ? <RefreshCw size={16} className="animate-spin" /> : <ArrowRight size={16} />}
@@ -3286,7 +3294,7 @@ export default function Home() {
                     type="button"
                     onClick={handleFinishOnboarding}
                     disabled={pending}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                    className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-[#059669] px-8 py-3 text-sm font-semibold text-white transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:bg-[#334155] disabled:text-[#94A3B8]"
                   >
                     <CheckCircle2 size={16} />
                     {pending ? 'Finalizando...' : 'Finalizar configuração'}

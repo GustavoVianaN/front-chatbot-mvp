@@ -2,7 +2,7 @@ export default function Privacy() {
   return (
     <main className="min-h-screen bg-slate-950 p-8 text-slate-200">
       <article className="mx-auto max-w-3xl prose prose-invert">
-        <h1>Política de Privacidade da Bella</h1>
+        <h1>Política de Privacidade da BellAI Connect</h1>
         <p>Versão de 30 de agosto de 2026.</p>
 
         <p className="rounded-xl border border-amber-600/40 bg-amber-500/10 p-4 text-sm text-amber-200">
@@ -16,7 +16,7 @@ export default function Privacy() {
         <p>
           Esta plataforma é operada por [RAZÃO SOCIAL DA EMPRESA], CNPJ [00.000.000/0001-00],
           contato para assuntos de privacidade: [privacidade@suaempresa.com.br]. Quando você
-          contrata a Bella para atender os clientes da sua empresa, existem dois papéis distintos
+          contrata a BellAI Connect para atender os clientes da sua empresa por meio da Bella, existem dois papéis distintos
           na Lei Geral de Proteção de Dados (LGPD):
         </p>
         <ul>
@@ -26,13 +26,13 @@ export default function Privacy() {
             que finalidade usá-los no seu negócio.
           </li>
           <li>
-            <strong>A Bella é operadora</strong> desses dados: processamos as conversas e
+            <strong>A BellAI Connect é operadora</strong> desses dados: processamos as conversas e
             informações apenas para prestar o serviço contratado por você, seguindo suas
             instruções (ex: configuração do assistente, base de conhecimento).
           </li>
           <li>
             Para os dados do seu próprio cadastro na plataforma (nome, e-mail, senha, plano,
-            uso), a Bella é controladora.
+            uso), a BellAI Connect é controladora.
           </li>
         </ul>
 
