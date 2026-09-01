@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 
 type FormState = {
@@ -33,6 +33,13 @@ export default function SignupPage() {
   const [message, setMessage] = useState('');
   const [consentError, setConsentError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('acceptTerms') === '1') {
+      setForm((current) => ({ ...current, acceptTerms: true }));
+    }
+  }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
