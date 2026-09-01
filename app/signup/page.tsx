@@ -68,7 +68,7 @@ export default function SignupPage() {
       setMessage(p.error || 'Não foi possível criar a conta.');
       return;
     }
-    setMessage('Conta criada. Você já pode entrar.');
+    window.location.href = `/login?registered=1&email=${encodeURIComponent(form.email.trim())}`;
   }
 
   return (

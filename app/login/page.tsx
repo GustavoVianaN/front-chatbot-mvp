@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 
 type LoginResponse = {
   success?: boolean;
@@ -11,7 +11,16 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [accountCreated, setAccountCreated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('registered') === '1') {
+      setAccountCreated(true);
+      setEmail(params.get('email') || '');
+    }
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -53,6 +62,11 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit} className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/90 p-8 shadow-panel">
         <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Acesso administrativo</p>
         <h1 className="mt-3 text-3xl font-semibold text-white">Entrar na BellAI Connect</h1>
+        {accountCreated && (
+          <div role="status" className="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+            Conta criada com sucesso. Entre com seu e-mail e senha para continuar.
+          </div>
+        )}
         <div className="mt-8 space-y-4">
           <label className="space-y-2 text-sm text-slate-300">
             Email
