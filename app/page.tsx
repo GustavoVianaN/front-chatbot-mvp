@@ -17,7 +17,7 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, generateCompanyIntakeOpeningQuestion, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
 import type { AuthUser, AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeDescriptionAudio, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
@@ -183,15 +183,16 @@ const onboardingBellaGuideMessages: Record<number, { title: string; body: string
 // horário de atendimento ou produtos).
 const freeFlowGuidedQuestionCap = 5;
 const minimumCompanyGuidedAnswers = freeFlowGuidedQuestionCap;
-// A pergunta 1 começa com um texto genérico e é substituída pela versão
-// gerada a partir do segmento assim que a chamada à IA responde (ver efeito
-// de busca da pergunta de abertura). Isso evita a tela em branco enquanto
-// carrega.
+// Pergunta 1 é sempre esta mesma pergunta ampla, fixa (não gerada por IA
+// nem por segmento) — dá uma boa base de informação de uma vez só, sem
+// parecer que o cliente precisa preencher um relatório. Toda pergunta
+// seguinte é que reage à resposta anterior e explora só o que ficou
+// faltando (ver generateCompanyIntakeFollowUpQuestion).
 const initialCompanyGuidedQuestions: CompanyGuidedQuestion[] = [
   {
     id: 1,
     topic: 'company_description',
-    question: 'Para começar, me conta: o que sua empresa faz?',
+    question: 'Para começar, me conte com suas palavras: o que sua empresa faz e como vocês atendem seus clientes? Pode compartilhar todos os detalhes que considerar importantes.',
   },
 ];
 
@@ -635,8 +636,6 @@ export default function Home() {
     }
   };
   const [companyGuidedQuestions, setCompanyGuidedQuestions] = useState<CompanyGuidedQuestion[]>(initialCompanyGuidedQuestions);
-  const [generatingCompanyGuidedOpening, setGeneratingCompanyGuidedOpening] = useState(false);
-  const companyGuidedOpeningFetchedRef = useRef(false);
   const [companyGuidedClarifications, setCompanyGuidedClarifications] = useState<Record<number, { userText: string; bellaText: string }[]>>({});
   const [generatingCompanyGuidedClarification, setGeneratingCompanyGuidedClarification] = useState(false);
   const [generatingCompanyGuidedQuestion, setGeneratingCompanyGuidedQuestion] = useState(false);
@@ -1048,36 +1047,6 @@ export default function Home() {
       setCompanyGuidedQuestionsUnlocked(true);
     }
   }, [canUnlockCompanyGuidedQuestions]);
-
-  // A pergunta 1 não é mais fixa e genérica para todo mundo: assim que o
-  // segmento (Passo 1) estiver disponível e a pessoa ainda não tiver
-  // respondido a abertura, busca uma pergunta específica para o segmento e
-  // substitui o placeholder inicial.
-  useEffect(() => {
-    if (companyGuidedOpeningFetchedRef.current) return;
-    if (!canShowCompanyGuidedQuestions) return;
-    if (answeredCompanyGuidedQuestionIds.has(1)) return;
-
-    const companyName = onboardingDraft.company_name.trim();
-    const segment = onboardingDraft.segment.trim();
-
-    if (!companyName || !segment) return;
-
-    companyGuidedOpeningFetchedRef.current = true;
-    setGeneratingCompanyGuidedOpening(true);
-
-    generateCompanyIntakeOpeningQuestion({ company_name: companyName, segment })
-      .then((result) => {
-        const question = result.question?.trim();
-        if (!question) return;
-
-        setCompanyGuidedQuestions((current) => current.map((item) => (
-          item.id === 1 ? { ...item, question } : item
-        )));
-      })
-      .catch(() => undefined)
-      .finally(() => setGeneratingCompanyGuidedOpening(false));
-  }, [canShowCompanyGuidedQuestions, answeredCompanyGuidedQuestionIds, onboardingDraft.company_name, onboardingDraft.segment]);
 
   // Fase 2: só depois que o papo livre (abertura + 4 perguntas) terminar é
   // que perguntamos diretamente sobre o que ainda estiver faltando (horário
@@ -2705,18 +2674,6 @@ export default function Home() {
                                   </div>
                                 </div>
                               </div>
-                            ) : generatingCompanyGuidedOpening ? (
-                              <div className="flex items-start gap-3">
-                                <div className="bella-guide-avatar flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
-                                  <img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" />
-                                </div>
-                                <div className="relative flex-1 rounded-xl bg-[#111C32] px-4 py-3.5">
-                                  <div className="flex items-center gap-2 text-sm font-semibold text-[#94A3B8]">
-                                    <RefreshCw size={14} className="animate-spin" />
-                                    Bella está preparando a conversa...
-                                  </div>
-                                </div>
-                              </div>
                             ) : currentCompanyGuidedQuestion ? (
                               <div className="flex items-start gap-3">
                                 <div className="bella-guide-avatar flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
@@ -2791,7 +2748,7 @@ export default function Home() {
                             )}
                           </div>
 
-                          {currentCompanyGuidedQuestion && !generatingCompanyGuidedQuestion && !generatingCompanyGuidedClarification && !generatingCompanyGuidedOpening && (
+                          {currentCompanyGuidedQuestion && !generatingCompanyGuidedQuestion && !generatingCompanyGuidedClarification && (
                             <div className="mt-5 border-t border-[#26344D] pt-4">
                               {REALTIME_VOICE_ENABLED && realtimeVoiceActive ? (
                                 <div className="mb-3 flex flex-col gap-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-r from-emerald-500/10 via-cyan-500/10 to-violet-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
