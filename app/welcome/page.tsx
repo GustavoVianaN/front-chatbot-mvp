@@ -1,6 +1,6 @@
 import { ArrowRight, Bot, Check, CheckCircle2, Clock3, Headphones, MessageCircle, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import { getPlans } from '@/lib/api';
-import { LANDING_PLAN_CONTENT } from '@/lib/landing-plans';
+import { LANDING_PLAN_CONTENT, LANDING_PLAN_ORDER } from '@/lib/landing-plans';
 import { Reveal, StickyLandingHeader } from '@/components/LandingMotion';
 
 function formatBrl(value: number) {
@@ -15,6 +15,22 @@ const benefits = [
 
 export default async function WelcomePage() {
   const plans = await getPlans().catch(() => []);
+  const landingPlans = LANDING_PLAN_ORDER.map((planCode) => {
+    const apiPlan = plans.find((plan) => plan.plan === planCode);
+    const content = LANDING_PLAN_CONTENT[planCode];
+
+    return {
+      plan: planCode,
+      description: content.description,
+      // Preço e label vêm da API sempre que disponível — o valor local só
+      // existe como fallback se a chamada a getPlans() falhar, para a
+      // landing nunca mostrar um preço diferente do que é cobrado de
+      // verdade (ver account.service.ts#PLAN_CATALOG).
+      label: apiPlan?.label ?? content.label,
+      monthlyPriceBrl: apiPlan?.monthlyPriceBrl ?? content.monthlyPriceBrl,
+      highlights: apiPlan?.highlights ?? content.fallbackHighlights,
+    };
+  });
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#F7F9F7] text-[#101828]">
@@ -88,8 +104,7 @@ export default async function WelcomePage() {
         </div>
       </section>
 
-      {plans.length > 0 && (
-        <section className="bg-[#F7F9F7]">
+      <section className="bg-[#F7F9F7]">
           <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28 lg:px-12 lg:py-[120px]">
             <div className="max-w-2xl">
               <Reveal><p className="text-sm font-bold uppercase tracking-[0.16em] text-[#079669]">Planos para começar</p></Reveal>
@@ -97,27 +112,22 @@ export default async function WelcomePage() {
               <Reveal delay={180}><p className="mt-4 text-base leading-7 text-[#667085]">Comece com 100 respostas grátis, sem cartão e sem prazo, e escolha o plano que acompanha o crescimento do seu atendimento.</p></Reveal>
             </div>
             <div className="mt-12 grid gap-5 lg:grid-cols-3">
-              {plans.map((plan, index) => {
-                const content = LANDING_PLAN_CONTENT[plan.plan];
-
-                return (
+              {landingPlans.map((plan, index) => (
                   <Reveal key={plan.plan} delay={index * 100} className="h-full">
                     <article className={`landing-card relative flex h-full flex-col rounded-2xl border bg-white p-7 lg:p-8 ${plan.plan === 'PRO' ? 'border-[#12B981] shadow-[0_12px_30px_-18px_rgba(7,150,105,.4)]' : 'border-[#E4E7EC]'}`}>
                       {plan.plan === 'PRO' && <span className="absolute right-5 top-5 rounded-full bg-[#ECFDF5] px-3 py-1 text-xs font-bold text-[#067647]">Mais escolhido</span>}
-                      <strong className="text-xl">{content.label}</strong>
-                      <p className="mt-2 min-h-12 text-sm leading-6 text-[#667085]">{content.description}</p>
-                      <p className="mt-6 text-4xl font-bold tracking-[-0.04em]">{formatBrl(content.monthlyPriceBrl)} <span className="text-sm font-medium tracking-normal text-[#667085]">/mês</span></p>
+                      <strong className="text-xl">{plan.label}</strong>
+                      <p className="mt-2 min-h-12 text-sm leading-6 text-[#667085]">{plan.description}</p>
+                      <p className="mt-6 text-4xl font-bold tracking-[-0.04em]">{formatBrl(plan.monthlyPriceBrl)} <span className="text-sm font-medium tracking-normal text-[#667085]">/mês</span></p>
                       <ul className="mt-7 flex-1 space-y-3 text-sm text-[#475467]">{plan.highlights.map((highlight) => <li key={highlight} className="flex gap-2.5"><CheckCircle2 aria-hidden="true" size={18} className="shrink-0 text-[#079669]" />{highlight}</li>)}</ul>
                       <a href="/signup" className="landing-cta mt-7 inline-flex min-h-12 items-center justify-center rounded-xl bg-[#059669] px-5 py-3 text-sm font-semibold text-white hover:bg-[#047857] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#079669] focus-visible:ring-offset-2">Começar grátis</a>
                       <p className="mt-2 text-center text-xs font-medium text-[#667085]">Teste com 100 respostas grátis</p>
                     </article>
                   </Reveal>
-                );
-              })}
+              ))}
             </div>
           </div>
-        </section>
-      )}
+      </section>
 
       <section className="bg-[#101828] text-white"><Reveal className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-7 px-5 py-16 sm:px-8 md:flex-row md:items-center lg:px-12"><div><h2 className="text-2xl font-bold tracking-[-0.03em] sm:text-3xl">Seu próximo atendimento pode começar agora.</h2><p className="mt-2 text-[#D0D5DD]">Configure sua conta na BellAI Connect em minutos e teste com 100 respostas grátis.</p></div><a href="/signup" className="landing-cta inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-[#059669] px-7 py-3.5 font-semibold text-white hover:bg-[#047857] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#101828] sm:w-auto">Começar grátis <ArrowRight aria-hidden="true" size={18} className="landing-cta-arrow" /></a></Reveal></section>
       <footer className="border-t border-[#E4E7EC] bg-white"><div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-7 text-sm text-[#667085] sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12"><span>© {new Date().getFullYear()} BellAI Connect. Atendimento inteligente para WhatsApp.</span><div className="flex gap-5"><a className="hover:text-[#101828]" href="/legal/terms">Termos</a><a className="hover:text-[#101828]" href="/legal/privacy">Privacidade</a></div></div></footer>

@@ -31,10 +31,23 @@ export default function SignupPage() {
     acceptPrivacy: false,
   });
   const [message, setMessage] = useState('');
+  const [consentError, setConsentError] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (!form.acceptTerms || !form.acceptPrivacy) {
+      setConsentError(
+        !form.acceptTerms && !form.acceptPrivacy
+          ? 'Aceite os Termos de Uso e a Política de Privacidade para continuar.'
+          : !form.acceptTerms
+            ? 'Aceite os Termos de Uso para continuar.'
+            : 'Aceite a Política de Privacidade para continuar.',
+      );
+      return;
+    }
+
+    setConsentError('');
     setBusy(true);
     setMessage('');
     const r = await fetch('/api/auth/register', {
@@ -107,10 +120,14 @@ export default function SignupPage() {
             <div className="space-y-2.5 pt-1">
               <label className="flex items-start gap-2.5 text-sm text-[#475467]">
                 <input
-                  required
                   type="checkbox"
                   checked={form.acceptTerms}
-                  onChange={(e) => setForm((v) => ({ ...v, acceptTerms: e.target.checked }))}
+                  aria-invalid={Boolean(consentError) && !form.acceptTerms}
+                  aria-describedby={consentError ? 'consent-error' : undefined}
+                  onChange={(e) => {
+                    setForm((v) => ({ ...v, acceptTerms: e.target.checked }));
+                    setConsentError('');
+                  }}
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#D0D5DD] text-[#10B981] focus:ring-[#10B981]"
                 />
                 <span>
@@ -122,10 +139,14 @@ export default function SignupPage() {
               </label>
               <label className="flex items-start gap-2.5 text-sm text-[#475467]">
                 <input
-                  required
                   type="checkbox"
                   checked={form.acceptPrivacy}
-                  onChange={(e) => setForm((v) => ({ ...v, acceptPrivacy: e.target.checked }))}
+                  aria-invalid={Boolean(consentError) && !form.acceptPrivacy}
+                  aria-describedby={consentError ? 'consent-error' : undefined}
+                  onChange={(e) => {
+                    setForm((v) => ({ ...v, acceptPrivacy: e.target.checked }));
+                    setConsentError('');
+                  }}
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#D0D5DD] text-[#10B981] focus:ring-[#10B981]"
                 />
                 <span>
@@ -135,6 +156,7 @@ export default function SignupPage() {
                   </a>
                 </span>
               </label>
+              {consentError && <p id="consent-error" role="alert" className="rounded-lg bg-[#FFF4ED] px-3 py-2 text-sm font-medium text-[#B42318]">{consentError}</p>}
             </div>
 
             {message && <p className="rounded-xl bg-[#F2F4F7] p-3 text-sm text-[#344054]">{message}</p>}

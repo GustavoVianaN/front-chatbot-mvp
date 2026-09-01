@@ -1,47 +1,31 @@
 export default function Terms() {
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-slate-200">
-      <article className="mx-auto max-w-3xl prose prose-invert">
+    <main className="min-h-screen bg-[#F7F9F7] px-5 py-8 text-[#344054] sm:px-8 sm:py-12">
+      <header className="mx-auto mb-8 flex max-w-4xl items-center justify-between">
+        <a href="/welcome" className="text-lg font-bold tracking-[-0.03em] text-[#101828]">BellAI Connect</a>
+        <a href="/welcome" className="rounded-lg px-3 py-2 text-sm font-semibold text-[#475467] transition hover:bg-white hover:text-[#101828]">Voltar ao início</a>
+      </header>
+      <article className="mx-auto max-w-4xl rounded-3xl border border-[#E4E7EC] bg-white px-6 py-9 shadow-[0_20px_50px_-35px_rgba(16,24,40,.28)] sm:px-10 sm:py-12 lg:px-14 [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:tracking-[-0.035em] [&_h1]:text-[#101828] sm:[&_h1]:text-4xl [&_h2]:mb-3 [&_h2]:mt-10 [&_h2]:border-t [&_h2]:border-[#EAECF0] [&_h2]:pt-8 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-[#101828] [&_li]:mb-2 [&_li]:leading-7 [&_p]:mt-4 [&_p]:leading-7 [&_strong]:font-semibold [&_strong]:text-[#1D2939] [&_ul]:mt-4 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-6">
         <h1>Termos de Uso da BellAI Connect</h1>
-        <p>Versão de 30 de agosto de 2026.</p>
-
-        <p className="rounded-xl border border-amber-600/40 bg-amber-500/10 p-4 text-sm text-amber-200">
-          <strong>Rascunho.</strong> Este texto descreve com precisão o que o sistema faz hoje,
-          mas ainda precisa passar por revisão de um advogado antes de valer como documento
-          oficial vinculante. Os campos entre colchetes precisam ser preenchidos com os dados
-          reais da empresa responsável antes da publicação.
-        </p>
+        <p className="!mt-3 text-sm font-medium text-[#667085]">Última atualização: 30 de agosto de 2026.</p>
 
         <h2>1. Sobre o serviço</h2>
         <p>
-          A BellAI Connect é oferecida por [RAZÃO SOCIAL DA EMPRESA], CNPJ [00.000.000/0001-00]. A plataforma
-          automatiza o atendimento pelo WhatsApp da sua empresa e organiza informações de
+          A BellAI Connect é oferecida por 58.730.791 Gustavo Viana do Nascimento, empresário
+          individual enquadrado como Microempreendedor Individual (MEI), inscrito no CNPJ sob
+          o nº 58.730.791/0001-95, com sede em Curitiba, Paraná. A plataforma automatiza o
+          atendimento pelo WhatsApp da sua empresa e organiza informações de
           clientes, produtos e conversas. As respostas são geradas por inteligência artificial
-          e podem conter imprecisões — é responsabilidade da empresa contratante supervisionar
+          e podem conter imprecisões é responsabilidade da empresa contratante supervisionar
           o atendimento, especialmente no início de uso.
         </p>
 
-        <h2>2. Canais de WhatsApp disponíveis</h2>
-        <p>Hoje a plataforma oferece dois canais de conexão, com riscos diferentes:</p>
-        <ul>
-          <li>
-            <strong>WhatsApp Cloud API (canal oficial da Meta):</strong> conexão homologada
-            diretamente pela Meta, mais estável e sem risco de bloqueio por uso automatizado.
-          </li>
-          <li>
-            <strong>WhatsApp Web (conexão não oficial, via biblioteca de código aberto):</strong>
-            emula um dispositivo conectado ao WhatsApp comum da empresa, sem homologação da
-            Meta. <strong>A empresa contratante reconhece e aceita que esse canal pode violar
-            os Termos de Serviço do WhatsApp e que o número conectado corre risco real de
-            suspensão ou banimento pela Meta, a qualquer momento e sem aviso prévio.</strong> A
-            BellAI Connect não garante disponibilidade, estabilidade nem continuidade desse canal, e não
-            se responsabiliza por perdas decorrentes de bloqueio do número pela Meta/WhatsApp
-            quando esse for o canal escolhido pela empresa contratante.
-          </li>
-        </ul>
+        <h2>2. Integração com o WhatsApp</h2>
         <p>
-          A escolha do canal é feita pela empresa contratante, que deve avaliar o risco antes de
-          conectar um número usado para fins comerciais importantes.
+          O funcionamento do atendimento depende da conexão da conta da empresa com o WhatsApp.
+          A empresa contratante deve utilizar um número sobre o qual tenha autorização e respeitar
+          as regras do WhatsApp. A disponibilidade dessa integração também pode ser afetada por
+          alterações, restrições ou indisponibilidades do próprio WhatsApp.
         </p>
 
         <h2>3. Responsabilidades da empresa contratante</h2>
@@ -55,25 +39,18 @@ export default function Terms() {
 
         <h2>4. Planos, limites e cobrança</h2>
         <p>
-          A BellAI Connect é oferecida nos planos descritos na página de Conta/Planos, cada um com
-          limites mensais de mensagens, uso de IA, minutos de áudio, armazenamento, contatos e
-          membros de equipe. Ao ultrapassar o limite do plano, o atendimento automático pode ser
-          pausado até renovação do ciclo ou upgrade de plano — a empresa contratante é avisada
-          no painel quando estiver próxima do limite.
-        </p>
-        <p>
-          <strong>Confirmação de pagamento:</strong> nesta fase inicial, a confirmação de
-          pagamento e ativação de plano é feita manualmente pela equipe da BellAI Connect após o
-          recebimento (ex: PIX ou transferência, conforme combinado no momento da contratação).
-          A automação de cobrança recorrente ainda está em desenvolvimento.
+          A BellAI Connect é oferecida nos planos e condições apresentados na página de Planos.
+          Cada plano possui limites próprios de uso. Ao atingir o limite contratado, alguns
+          recursos podem ser pausados até o início de um novo ciclo ou a mudança de plano.
         </p>
         <p>
           <strong>Reajuste:</strong> valores podem ser reajustados mediante aviso prévio de 30
           dias, aplicável a partir do próximo ciclo de cobrança.
         </p>
         <p>
-          <strong>Reembolso:</strong> [defina aqui a política de reembolso/cancelamento —
-          ex: sem reembolso de período já pago, ou reembolso proporcional em X dias].
+          <strong>Reembolso:</strong> eventuais solicitações serão analisadas conforme a
+          legislação aplicável, as condições informadas no momento da contratação e o período
+          efetivamente utilizado.
         </p>
 
         <h2>5. Período de teste (trial)</h2>
@@ -104,8 +81,8 @@ export default function Terms() {
           A BellAI Connect é fornecida &quot;como está&quot;, sem garantia de disponibilidade
           ininterrupta. Não nos responsabilizamos por: decisões comerciais tomadas com base em
           respostas geradas por IA sem supervisão adequada; indisponibilidade de serviços de
-          terceiros dos quais dependemos (Meta/WhatsApp, OpenAI, provedores de nuvem); ou
-          bloqueio de número no canal WhatsApp Web, conforme item 2. Nossa responsabilidade,
+          terceiros necessários à prestação do serviço; ou restrições aplicadas ao número de
+          WhatsApp da empresa contratante. Nossa responsabilidade,
           quando aplicável, está limitada ao valor pago pela empresa contratante nos últimos 3
           meses de uso.
         </p>
@@ -119,12 +96,12 @@ export default function Terms() {
         <h2>10. Lei aplicável e foro</h2>
         <p>
           Estes termos são regidos pela legislação brasileira. Fica eleito o foro da comarca de
-          [CIDADE/UF] para dirimir eventuais controvérsias, com renúncia a qualquer outro, por
+          Curitiba/PR para dirimir eventuais controvérsias, com renúncia a qualquer outro, por
           mais privilegiado que seja.
         </p>
 
         <h2>11. Contato</h2>
-        <p>Dúvidas sobre estes termos: [contato@suaempresa.com.br].</p>
+        <p>Dúvidas sobre estes termos: +55 41 9127-5799.</p>
       </article>
     </main>
   );
