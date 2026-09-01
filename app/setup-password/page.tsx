@@ -35,15 +35,20 @@ function SetupPasswordForm() {
     }
 
     setSubmitting(true);
-    const result = resetMode ? await resetPassword(token, password) : await setupPassword(token, password);
-    setSubmitting(false);
+    try {
+      const result = resetMode ? await resetPassword(token, password) : await setupPassword(token, password);
 
-    if (!result.success) {
-      setError(result.error || 'Não foi possível definir a senha.');
-      return;
+      if (!result.success) {
+        setError(result.error || 'Não foi possível definir a senha.');
+        return;
+      }
+
+      setSuccess(true);
+    } catch {
+      setError('Não foi possível definir a senha agora. Tente novamente.');
+    } finally {
+      setSubmitting(false);
     }
-
-    setSuccess(true);
   };
 
   return (

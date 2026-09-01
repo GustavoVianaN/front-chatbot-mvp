@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { MessageCircle, Send, X } from 'lucide-react';
 import { askBella } from '@/lib/api';
 
@@ -23,6 +23,12 @@ export default function BellaAssistant() {
   const [messages, setMessages] = useState<BellaMessage[]>(starterMessages);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    const openAssistant = () => setOpen(true);
+    window.addEventListener('open-bella-assistant', openAssistant);
+    return () => window.removeEventListener('open-bella-assistant', openAssistant);
+  }, []);
 
   const sendMessage = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import {
   ArrowRight,
+  Bot,
   Building2,
   CheckCircle2,
   FileText,
@@ -12,12 +13,13 @@ import {
   Mic,
   Paperclip,
   RefreshCw,
+  Send,
   Settings as SettingsIcon,
   Sparkles,
   Square,
   Trash2,
 } from 'lucide-react';
-import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateBotTestResponse, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
 import type { AuthUser, AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeDescriptionAudio, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
@@ -69,6 +71,16 @@ type CompanyGuidedQuestion = {
   id: number;
   question: string;
   topic?: string;
+};
+type OnboardingTestMessage = {
+  id: string;
+  role: 'customer' | 'bot';
+  text: string;
+};
+type OnboardingCorrectionMessage = {
+  id: string;
+  role: 'user' | 'bella';
+  text: string;
 };
 
 // Tipagem mínima da Web Speech API (não incluída nos libs padrão do TS).
@@ -127,7 +139,7 @@ const companyIntakeFileTypes = new Set([
 const companyIntakeFileExtensions = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|csv|txt|png|jpe?g|webp|gif)$/i;
 const maxCompanyIntakeFileBytes = 5 * 1024 * 1024;
 const onboardingStorageKey = 'bella-ai-onboarding-completed';
-const onboardingTotalSteps = 5;
+const onboardingTotalSteps = 6;
 const defaultCompanyIntakeExample = `Ex:
 Vendemos produtos e serviços para clientes finais.
 Atendemos pedidos e dúvidas pelo WhatsApp.
@@ -174,6 +186,10 @@ const onboardingBellaGuideMessages: Record<number, { title: string; body: string
   5: {
     title: 'Revise antes de finalizar.',
     body: 'Confira se o nome, o tom e o conhecimento ficaram certos. Se algo não estiver bom, você ainda pode voltar e ajustar.',
+  },
+  6: {
+    title: 'Agora vamos testar seu assistente.',
+    body: 'Converse como um cliente. Se alguma resposta não ficar boa, me diga ao lado o que deve melhorar e eu aplico a correção.',
   },
 };
 // Fase 1 (papo livre): 1 pergunta de abertura (gerada a partir do segmento)
@@ -658,6 +674,17 @@ export default function Home() {
   const [finishingProgress, setFinishingProgress] = useState(0);
   const [tonePromptOpen, setTonePromptOpen] = useState(false);
   const [knowledgeReviewOpen, setKnowledgeReviewOpen] = useState(false);
+  const [onboardingTestMessages, setOnboardingTestMessages] = useState<OnboardingTestMessage[]>([]);
+  const [onboardingTestInput, setOnboardingTestInput] = useState('');
+  const [onboardingTestPending, setOnboardingTestPending] = useState(false);
+  const [onboardingTestSimulationId, setOnboardingTestSimulationId] = useState<string>();
+  const [onboardingCorrectionMessages, setOnboardingCorrectionMessages] = useState<OnboardingCorrectionMessage[]>([
+    { id: 'bella-test-welcome', role: 'bella', text: 'Eu acompanho os testes por aqui. Quando uma resposta não ficar boa, me explique como o assistente deveria responder.' },
+  ]);
+  const [onboardingCorrectionInput, setOnboardingCorrectionInput] = useState('');
+  const [onboardingCorrectionPending, setOnboardingCorrectionPending] = useState(false);
+  const [lastOnboardingTestQuestion, setLastOnboardingTestQuestion] = useState('');
+  const [lastOnboardingTestResponse, setLastOnboardingTestResponse] = useState('');
   const [onboardingDraft, setOnboardingDraft] = useState({
     company_name: '',
     segment: '',
@@ -2272,6 +2299,44 @@ export default function Home() {
     return true;
   };
 
+  const persistOnboardingConfiguration = async () => {
+    if (!botConfig) throw new Error('Configuração do assistente não encontrada.');
+
+    const nextAssistantName = onboardingDraft.assistant_name.trim() || botConfig.assistant_name;
+    const nextCompanyName = onboardingDraft.company_name.trim() || botConfig.company_name;
+    const nextSegment = onboardingDraft.segment.trim() || botConfig.segment;
+    const nextTone = onboardingDraft.tone.trim() || botConfig.tone;
+    const nextCompanyDescription = companyIntakeText.trim() || effectiveCompanyIntakeSummary.trim() || botConfig.company_description;
+    const onboardingBotDefaults = buildOnboardingBotDefaults({ assistantName: nextAssistantName, companyName: nextCompanyName });
+    const updated = await updateBotConfig({
+      ...botConfig,
+      ...onboardingBotDefaults,
+      assistant_name: nextAssistantName,
+      company_name: nextCompanyName,
+      segment: nextSegment,
+      tone: nextTone,
+      response_length: onboardingDraft.response_length,
+      use_emojis: onboardingDraft.use_emojis,
+      analyze_images: onboardingDraft.analyze_images,
+      allow_image_generation: onboardingDraft.allow_image_generation,
+      allow_audio_messages: onboardingDraft.allow_audio_messages,
+      bot_enabled: onboardingDraft.bot_enabled,
+      company_description: nextCompanyDescription,
+      welcome_message: botConfig.welcome_message?.trim() ? botConfig.welcome_message : buildAutomaticWelcomeMessage({
+        assistantName: nextAssistantName,
+        companyName: nextCompanyName,
+        segment: nextSegment,
+      }),
+      response_rules: botConfig.response_rules?.trim() || requiredResponseRules,
+    });
+
+    setBotConfig(updated);
+    if (effectiveCompanyIntakeSummary.trim() || companyIntakeText.trim() || companyIntakeFiles.length > 0 || commercialKnowledgeText.trim() || commercialInfoFiles.length > 0) {
+      await handleSaveCompanyIntake();
+    }
+    return updated;
+  };
+
   const handleNextOnboardingStep = async () => {
     if (onboardingStep === 3 && companyIntakeValidationError) {
       setCompanyIntakeError(companyIntakeValidationError);
@@ -2289,7 +2354,82 @@ export default function Home() {
       return;
     }
 
+    if (onboardingStep === 5) {
+      setPending(true);
+      try {
+        await persistOnboardingConfiguration();
+        setOnboardingStep(6);
+      } catch (error) {
+        toast(error instanceof Error ? error.message : 'Não foi possível preparar o teste do assistente.');
+      } finally {
+        setPending(false);
+      }
+      return;
+    }
+
     setOnboardingStep((current) => Math.min(onboardingTotalSteps, current + 1));
+  };
+
+  const sendOnboardingTestMessage = async (suggestedMessage?: string) => {
+    const message = (suggestedMessage || onboardingTestInput).trim();
+    if (!message || !botConfig || onboardingTestPending) return;
+
+    const customerMessage: OnboardingTestMessage = { id: `customer-${Date.now()}`, role: 'customer', text: message };
+    const previousMessages = [...onboardingTestMessages, customerMessage];
+    setOnboardingTestMessages(previousMessages);
+    setOnboardingTestInput('');
+    setOnboardingTestPending(true);
+
+    try {
+      const context = previousMessages.slice(-10).map((item) => `${item.role === 'customer' ? 'Cliente' : botConfig.assistant_name}: ${item.text}`).join('\n');
+      const result = await generateBotTestResponse(botConfig, message, context, onboardingTestSimulationId);
+      setOnboardingTestSimulationId(result.simulationId);
+      setOnboardingTestMessages((current) => [...current, { id: `bot-${Date.now()}`, role: 'bot', text: result.response }]);
+      setLastOnboardingTestQuestion(message);
+      setLastOnboardingTestResponse(result.response);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível testar o assistente agora.');
+    } finally {
+      setOnboardingTestPending(false);
+    }
+  };
+
+  const applyOnboardingCorrection = async () => {
+    const correction = onboardingCorrectionInput.trim();
+    if (!correction || !botConfig || onboardingCorrectionPending) return;
+    if (!lastOnboardingTestQuestion || !lastOnboardingTestResponse) {
+      toast('Faça primeiro uma pergunta no chat de teste.');
+      return;
+    }
+
+    setOnboardingCorrectionMessages((current) => [...current, { id: `correction-user-${Date.now()}`, role: 'user', text: correction }]);
+    setOnboardingCorrectionInput('');
+    setOnboardingCorrectionPending(true);
+
+    try {
+      const correctionRule = [
+        'CORREÇÃO APROVADA EM TESTE:',
+        `Pergunta ou situação do cliente: ${lastOnboardingTestQuestion}`,
+        `Resposta que não ficou adequada: ${lastOnboardingTestResponse}`,
+        `Como deve responder ou agir: ${correction}`,
+      ].join('\n');
+      const updated = await updateBotConfig({
+        ...botConfig,
+        response_rules: [botConfig.response_rules?.trim() || requiredResponseRules, correctionRule].filter(Boolean).join('\n\n'),
+      });
+      setBotConfig(updated);
+      setOnboardingCorrectionMessages((current) => [...current, {
+        id: `correction-bella-${Date.now()}`,
+        role: 'bella',
+        text: 'Entendi e apliquei essa orientação ao assistente. Vou repetir a mesma pergunta no teste para você comparar a nova resposta.',
+      }]);
+      setOnboardingTestSimulationId(undefined);
+      await sendOnboardingTestMessage(lastOnboardingTestQuestion);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível aplicar a correção.');
+    } finally {
+      setOnboardingCorrectionPending(false);
+    }
   };
 
   const handleFinishOnboarding = async () => {
@@ -2303,45 +2443,8 @@ export default function Home() {
       await wait(450);
       setFinishingProgress(1);
 
-      const nextAssistantName = onboardingDraft.assistant_name.trim() || botConfig.assistant_name;
-      const nextCompanyName = onboardingDraft.company_name.trim() || botConfig.company_name;
-      const nextSegment = onboardingDraft.segment.trim() || botConfig.segment;
-      const nextTone = onboardingDraft.tone.trim() || botConfig.tone;
-      const nextCompanyDescription = companyIntakeText.trim() || effectiveCompanyIntakeSummary.trim() || botConfig.company_description;
-      const automaticWelcomeMessage = buildAutomaticWelcomeMessage({
-        assistantName: nextAssistantName,
-        companyName: nextCompanyName,
-        segment: nextSegment,
-      });
-      const onboardingBotDefaults = buildOnboardingBotDefaults({
-        assistantName: nextAssistantName,
-        companyName: nextCompanyName,
-      });
-
-      const updated = await updateBotConfig({
-        ...botConfig,
-        ...onboardingBotDefaults,
-        assistant_name: nextAssistantName,
-        company_name: nextCompanyName,
-        segment: nextSegment,
-        tone: nextTone,
-        response_length: onboardingDraft.response_length,
-        use_emojis: onboardingDraft.use_emojis,
-        analyze_images: onboardingDraft.analyze_images,
-        allow_image_generation: onboardingDraft.allow_image_generation,
-        allow_audio_messages: onboardingDraft.allow_audio_messages,
-        bot_enabled: onboardingDraft.bot_enabled,
-        company_description: nextCompanyDescription,
-        welcome_message: botConfig.welcome_message?.trim() ? botConfig.welcome_message : automaticWelcomeMessage,
-        response_rules: requiredResponseRules,
-      });
-
-      setBotConfig(updated);
+      await persistOnboardingConfiguration();
       setFinishingProgress(2);
-
-      if (effectiveCompanyIntakeSummary.trim() || companyIntakeText.trim() || companyIntakeFiles.length > 0 || commercialKnowledgeText.trim() || commercialInfoFiles.length > 0) {
-        await handleSaveCompanyIntake();
-      }
 
       await wait(650);
       setFinishingProgress(3);
@@ -2364,6 +2467,18 @@ export default function Home() {
     setOnboardingMode('hidden');
     setActiveSection('whatsapp');
     setWhatsappTab('status');
+  };
+
+  const handleImproveAssistant = () => {
+    setOnboardingMode('hidden');
+    setActiveSection('bot-config');
+    setBotConfigTab('config');
+  };
+
+  const handleTalkToBella = () => {
+    setOnboardingMode('hidden');
+    setActiveSection('dashboard');
+    window.setTimeout(() => window.dispatchEvent(new Event('open-bella-assistant')), 100);
   };
 
   const handleToggleTheme = () => {
@@ -2456,23 +2571,32 @@ export default function Home() {
               </div>
               <h1 className="mt-6 text-3xl font-semibold text-white">Sua IA está pronta.</h1>
               <p className="mx-auto mt-4 max-w-lg text-base leading-7 text-slate-400">
-                Conecte o WhatsApp para começar a atender seus clientes com a configuração criada.
+                A configuração foi salva e testada. Agora você pode conectar o assistente ou continuar ensinando e melhorando as respostas.
               </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={handleGoToWhatsAppSetup}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
+                  className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500"
                 >
-                  Conectar WhatsApp
+                  Conectar assistente
                   <ArrowRight size={16} />
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOnboardingMode('hidden')}
-                  className="inline-flex min-h-12 items-center justify-center rounded-xl border border-slate-800 px-5 py-3 text-sm font-semibold text-slate-400 transition hover:border-slate-600 hover:text-white"
+                  onClick={handleImproveAssistant}
+                  className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
                 >
-                  Ir para Dashboard
+                  <Sparkles size={16} />
+                  Melhorar meu bot
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTalkToBella}
+                  className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-emerald-500/50 hover:text-white"
+                >
+                  <MessageCircle size={16} />
+                  Conversar com a Bella
                 </button>
               </div>
             </div>
@@ -2562,6 +2686,7 @@ export default function Home() {
                       {onboardingStep === 3 && 'Ensine sua IA sobre sua empresa'}
                       {onboardingStep === 4 && 'Estilo de atendimento'}
                       {onboardingStep === 5 && 'Revisão final'}
+                      {onboardingStep === 6 && 'Teste e melhoria'}
                     </h1>
                     {onboardingStep === 1 && (
                       <p className="mt-2 text-sm leading-6 text-[#94A3B8]">Informe os dados básicos para a Bella reconhecer seu negócio.</p>
@@ -2577,6 +2702,9 @@ export default function Home() {
                     )}
                     {onboardingStep === 5 && (
                       <p className="mt-2 text-sm leading-6 text-[#94A3B8]">Revise as escolhas antes de concluir a configuração.</p>
+                    )}
+                    {onboardingStep === 6 && (
+                      <p className="mt-2 text-sm leading-6 text-[#94A3B8]">Teste como cliente e ensine a Bella a corrigir qualquer resposta que não ficar boa.</p>
                     )}
                   </div>
                 </div>
@@ -3224,6 +3352,79 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+
+                {onboardingStep === 6 && (
+                  <div className="mx-auto w-full max-w-6xl space-y-4">
+                    <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm leading-6 text-amber-100">
+                      Faça pelo menos um teste real. À esquerda você conversa com <strong>{botConfig.assistant_name}</strong> como se fosse um cliente. À direita, você conversa com a Bella para melhorar a resposta.
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <section className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-[#26344D] bg-[#080F20]">
+                        <div className="border-b border-[#26344D] px-4 py-4">
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300"><Bot size={20} /></span>
+                            <div>
+                              <p className="text-sm font-semibold text-white">Chat de teste · {botConfig.assistant_name}</p>
+                              <p className="text-xs text-slate-500">Você está falando como cliente</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+                          {onboardingTestMessages.length === 0 && (
+                            <div className="m-auto max-w-sm text-center">
+                              <MessageCircle className="mx-auto text-slate-600" size={28} />
+                              <p className="mt-3 text-sm font-semibold text-slate-300">Comece com uma pergunta real</p>
+                              <p className="mt-1 text-xs leading-5 text-slate-500">Use um cenário sugerido ou escreva algo que seus clientes perguntam.</p>
+                            </div>
+                          )}
+                          {onboardingTestMessages.map((message) => (
+                            <div key={message.id} className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'customer' ? 'self-end bg-emerald-600 text-white' : 'self-start border border-slate-700 bg-slate-900 text-slate-100'}`}>
+                              <p className="whitespace-pre-line">{message.text}</p>
+                            </div>
+                          ))}
+                          {onboardingTestPending && <div className="self-start rounded-2xl bg-slate-900 px-4 py-3 text-sm text-slate-400">{botConfig.assistant_name} está respondendo...</div>}
+                        </div>
+
+                        {lastOnboardingTestResponse && !onboardingTestPending && (
+                          <div className="flex items-center gap-2 border-t border-[#26344D] px-4 py-3">
+                            <span className="text-xs text-slate-500">Essa resposta ficou boa?</span>
+                            <button type="button" onClick={() => toast('Ótimo! Resposta aprovada.')} className="rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs font-semibold text-emerald-300">Sim</button>
+                            <button type="button" onClick={() => setOnboardingCorrectionMessages((current) => [...current, { id: `bella-help-${Date.now()}`, role: 'bella', text: 'Me diga com suas palavras o que ficou errado e como o assistente deveria agir nessa situação.' }])} className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-200">Quero corrigir</button>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 border-t border-[#26344D] p-3">
+                          <textarea value={onboardingTestInput} onChange={(event) => setOnboardingTestInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendOnboardingTestMessage(); } }} rows={2} placeholder="Escreva como se fosse um cliente..." className="min-h-[52px] flex-1 resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" />
+                          <button type="button" onClick={() => void sendOnboardingTestMessage()} disabled={!onboardingTestInput.trim() || onboardingTestPending} className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-xl bg-emerald-600 text-white disabled:bg-slate-700" aria-label="Enviar teste"><Send size={18} /></button>
+                        </div>
+                      </section>
+
+                      <section className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-emerald-500/25 bg-[#080F20]">
+                        <div className="flex items-center gap-3 border-b border-[#26344D] px-4 py-4">
+                          <span className="flex h-10 w-10 overflow-hidden rounded-xl bg-white"><img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" /></span>
+                          <div>
+                            <p className="text-sm font-semibold text-white">Melhorar com a Bella</p>
+                            <p className="text-xs text-slate-500">Explique o que deve mudar</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+                          {onboardingCorrectionMessages.map((message) => (
+                            <div key={message.id} className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'self-end bg-emerald-600 text-white' : 'self-start bg-[#111C32] text-slate-200'}`}>
+                              <p className="whitespace-pre-line">{message.text}</p>
+                            </div>
+                          ))}
+                          {onboardingCorrectionPending && <div className="self-start rounded-2xl bg-[#111C32] px-4 py-3 text-sm text-slate-400">Bella está aplicando a melhoria...</div>}
+                        </div>
+                        <div className="border-t border-[#26344D] p-3">
+                          <textarea value={onboardingCorrectionInput} onChange={(event) => setOnboardingCorrectionInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void applyOnboardingCorrection(); } }} rows={3} placeholder={lastOnboardingTestResponse ? 'Ex: antes de informar o preço, deve perguntar o modelo...' : 'Faça um teste à esquerda antes de solicitar uma correção.'} disabled={!lastOnboardingTestResponse} className="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-60" />
+                          <button type="button" onClick={() => void applyOnboardingCorrection()} disabled={!onboardingCorrectionInput.trim() || !lastOnboardingTestResponse || onboardingCorrectionPending} className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:bg-slate-700"><Sparkles size={16} />Aplicar melhoria e testar novamente</button>
+                        </div>
+                      </section>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col-reverse gap-3 border-t border-[#26344D] bg-[#0F172A] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
@@ -3250,11 +3451,11 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={handleFinishOnboarding}
-                    disabled={pending}
+                    disabled={pending || onboardingTestMessages.every((message) => message.role !== 'bot')}
                     className="inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-[#059669] px-8 py-3 text-sm font-semibold text-white transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:bg-[#334155] disabled:text-[#94A3B8]"
                   >
                     <CheckCircle2 size={16} />
-                    {pending ? 'Finalizando...' : 'Finalizar configuração'}
+                    {pending ? 'Finalizando...' : onboardingTestMessages.some((message) => message.role === 'bot') ? 'Concluir configuração' : 'Faça um teste para concluir'}
                   </button>
                 )}
               </div>
