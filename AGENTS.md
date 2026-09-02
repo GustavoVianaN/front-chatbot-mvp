@@ -42,7 +42,7 @@ Precisa do backend rodando (`../chatbot-mvp`) e de `.env.local` com
 | `/` (raiz) | **O painel principal, autenticado** — `app/page.tsx`, ~3600 linhas, o maior arquivo do repo. Contém: dashboard, config do bot, base de conhecimento, conversas (inbox com resposta manual + toggle liga/desliga bot), status do WhatsApp, configurações, **e o onboarding guiado** (não é uma rota separada — é um modo dentro deste componente, ativado quando `currentUser.onboardingCompleted === false`). |
 | `/account` | Plano/assinatura, uso do mês, botão "Pagar com cartão" (Stripe) e "Pagar manualmente (PIX)". **Sem link direto no menu principal** — só se chega via Configurações → "Gerenciar conta". |
 | `/legal/privacy`, `/legal/terms` | Páginas LGPD/termos, conteúdo real (não placeholder). |
-| `app/meta-embedded-signup/` | Pasta vazia, resquício/placeholder — sem `page.tsx`. Ignorar até virar algo. |
+| `app/meta-embedded-signup/` | Pasta vazia, resquício antigo — sem `page.tsx`. O Embedded Signup de verdade não usa essa rota; vive em `components/MetaEmbeddedSignupButton.tsx`, dentro do painel principal. |
 | `app/api/auth/*`, `app/api/realtime/session` | Route handlers do Next (não confundir com o backend Express) — usados pelo fluxo de voz em tempo real (WebRTC/Realtime API da OpenAI) e por login/registro/recuperação de senha via API route em vez de Server Action. |
 
 ## `app/page.tsx` (~3600 linhas) — como navegar sem ler tudo
@@ -71,11 +71,14 @@ inteiro — ele estoura limite de leitura em uma tacada só.
 
 `Sidebar`/`Topbar` (navegação), `ConversationList`/`ConversationPanel`/
 `ContactDetails` (inbox), `BotConfigPanel`/`KnowledgeEditor` (configuração
-do bot e base de conhecimento), `WhatsAppStatusPanel` (status/QR — a
-seção de "API oficial Meta" está **comentada de propósito**, só o card do
-WhatsApp Web fica visível hoje; não descomentar sem alinhar com o
-roadmap), `SettingsPanel` (link "Gerenciar conta" → `/account`),
-`BellaAssistant`, `MetricCard`, `Toast`.
+do bot e base de conhecimento), `WhatsAppStatusPanel` (status/QR — o card
+"API oficial Meta" agora é real, não mais comentado: só aparece quando o
+backend confirma `cloudApi.embeddedSignupAvailable`, ou seja, quando
+`META_APP_ID`/`META_CONFIG_ID` estão configurados lá), `MetaEmbeddedSignupButton`
+(carrega o SDK JS da Meta e conduz o fluxo de Embedded Signup — carrega o
+SDK assim que aparece na tela, nunca dentro do clique, senão o navegador
+bloqueia o popup silenciosamente), `SettingsPanel` (link "Gerenciar conta"
+→ `/account`), `BellaAssistant`, `MetricCard`, `Toast`.
 
 ## `lib/api.ts` (~660 linhas) e `lib/types.ts` (~470 linhas)
 
@@ -109,15 +112,21 @@ esse botão não aparece", checar a config do backend, não o frontend.
 - Áudio: `MediaRecorder.mimeType` vem com sufixo de codec (ex:
   `audio/webm;codecs=opus`) — sempre normalizar (`split(';')[0]`) antes de
   comparar/validar tipo, tanto aqui quanto no backend.
+- `next.config.mjs` também tem um `Content-Security-Policy` restritivo
+  (`script-src 'self' ...`). Qualquer script/iframe de domínio externo
+  (ex: SDK JS da Meta em `MetaEmbeddedSignupButton.tsx`) precisa ser
+  explicitamente liberado ali (`script-src`/`connect-src`/`frame-src`) —
+  sem isso, o carregamento falha silenciosamente no console
+  ("violates Content Security Policy"), não dá erro visível na tela.
 
-## Deploy / CI-CD
+## Deploy — atenção, isso mudou
 
-`.github/workflows/ci.yml` (audit+type-check+test+build) →
-`.github/workflows/deploy.yml` (dispara quando o CI passa na `main`; SSH
-até host Lightsail via secrets `LIGHTSAIL_*`, sobe imagem Docker
-standalone do Next). `docker-compose.yml` só tem um serviço
-(`bella-frontend`), sem banco (fala com o backend por HTTP). Detalhes em
-`PRODUCTION.md`.
+O `.github/workflows/deploy.yml` + `docker-compose.yml` deste repo fazem
+deploy via SSH pra um host Lightsail (standalone Docker do Next) — mas a
+**produção de verdade hoje roda na Vercel**, com `app.gustavoviana.com`
+(DNS na Cloudflare) apontando pra lá, não pro Lightsail. Antes de mexer em
+deploy, confirme com o usuário qual dos dois é o alvo atual — o pipeline
+Lightsail existe no repo mas pode não ser o que está realmente no ar.
 
 ## Riscos de produto conhecidos (não são bugs a "corrigir")
 
@@ -126,3 +135,13 @@ standalone do Next). `docker-compose.yml` só tem um serviço
 - WhatsApp Web (Baileys, no backend) é automação não-oficial: risco real
   de banimento do número do cliente pela Meta — comunicar isso é decisão
   de produto, não deste repo, mas afeta o que a UI promete ao cliente.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
