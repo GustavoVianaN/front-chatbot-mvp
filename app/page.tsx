@@ -76,6 +76,7 @@ type OnboardingTestMessage = {
   id: string;
   role: 'customer' | 'bot';
   text: string;
+  attachmentName?: string;
 };
 type OnboardingCorrectionMessage = {
   id: string;
@@ -676,6 +677,8 @@ export default function Home() {
   const [knowledgeReviewOpen, setKnowledgeReviewOpen] = useState(false);
   const [onboardingTestMessages, setOnboardingTestMessages] = useState<OnboardingTestMessage[]>([]);
   const [onboardingTestInput, setOnboardingTestInput] = useState('');
+  const [onboardingTestImage, setOnboardingTestImage] = useState<File | null>(null);
+  const [onboardingTestImageError, setOnboardingTestImageError] = useState('');
   const [onboardingTestPending, setOnboardingTestPending] = useState(false);
   const [onboardingTestSimulationId, setOnboardingTestSimulationId] = useState<string>();
   const [onboardingCorrectionMessages, setOnboardingCorrectionMessages] = useState<OnboardingCorrectionMessage[]>([
@@ -685,6 +688,7 @@ export default function Home() {
   const [onboardingCorrectionPending, setOnboardingCorrectionPending] = useState(false);
   const [lastOnboardingTestQuestion, setLastOnboardingTestQuestion] = useState('');
   const [lastOnboardingTestResponse, setLastOnboardingTestResponse] = useState('');
+  const [lastOnboardingTestImage, setLastOnboardingTestImage] = useState<File | null>(null);
   const [onboardingDraft, setOnboardingDraft] = useState({
     company_name: '',
     segment: '',
@@ -2370,23 +2374,55 @@ export default function Home() {
     setOnboardingStep((current) => Math.min(onboardingTotalSteps, current + 1));
   };
 
-  const sendOnboardingTestMessage = async (suggestedMessage?: string) => {
-    const message = (suggestedMessage || onboardingTestInput).trim();
-    if (!message || !botConfig || onboardingTestPending) return;
+  const handleOnboardingTestImage = (file?: File) => {
+    setOnboardingTestImageError('');
+    if (!file) return setOnboardingTestImage(null);
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mimeTypeForFile(file))) {
+      setOnboardingTestImage(null);
+      setOnboardingTestImageError('Envie uma imagem JPG, PNG, WEBP ou GIF.');
+      return;
+    }
+    if (file.size > maxCompanyIntakeFileBytes) {
+      setOnboardingTestImage(null);
+      setOnboardingTestImageError('A imagem pode ter no máximo 5 MB.');
+      return;
+    }
+    setOnboardingTestImage(file);
+  };
 
-    const customerMessage: OnboardingTestMessage = { id: `customer-${Date.now()}`, role: 'customer', text: message };
+  const sendOnboardingTestMessage = async (suggestedMessage?: string, suggestedImage?: File | null) => {
+    const message = (suggestedMessage || onboardingTestInput).trim();
+    const imageToSend = suggestedImage === undefined ? onboardingTestImage : suggestedImage;
+    if ((!message && !imageToSend) || !botConfig || onboardingTestPending) return;
+    const testSituation = message || `Imagem enviada pelo cliente: ${imageToSend?.name || 'imagem'}`;
+
+    const customerMessage: OnboardingTestMessage = {
+      id: `customer-${Date.now()}`,
+      role: 'customer',
+      text: message || 'Imagem enviada para análise.',
+      attachmentName: imageToSend?.name,
+    };
     const previousMessages = [...onboardingTestMessages, customerMessage];
     setOnboardingTestMessages(previousMessages);
     setOnboardingTestInput('');
+    setOnboardingTestImage(null);
+    setOnboardingTestImageError('');
     setOnboardingTestPending(true);
 
     try {
       const context = previousMessages.slice(-10).map((item) => `${item.role === 'customer' ? 'Cliente' : botConfig.assistant_name}: ${item.text}`).join('\n');
-      const result = await generateBotTestResponse(botConfig, message, context, onboardingTestSimulationId);
+      const attachment = imageToSend ? {
+        original_filename: imageToSend.name,
+        mime_type: mimeTypeForFile(imageToSend),
+        size_bytes: imageToSend.size,
+        data_url: await readFileAsDataUrl(imageToSend),
+      } : undefined;
+      const result = await generateBotTestResponse(botConfig, message, context, onboardingTestSimulationId, attachment);
       setOnboardingTestSimulationId(result.simulationId);
       setOnboardingTestMessages((current) => [...current, { id: `bot-${Date.now()}`, role: 'bot', text: result.response }]);
-      setLastOnboardingTestQuestion(message);
+      setLastOnboardingTestQuestion(testSituation);
       setLastOnboardingTestResponse(result.response);
+      setLastOnboardingTestImage(imageToSend || null);
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Não foi possível testar o assistente agora.');
     } finally {
@@ -2424,7 +2460,7 @@ export default function Home() {
         text: 'Entendi e apliquei essa orientação ao assistente. Vou repetir a mesma pergunta no teste para você comparar a nova resposta.',
       }]);
       setOnboardingTestSimulationId(undefined);
-      await sendOnboardingTestMessage(lastOnboardingTestQuestion);
+      await sendOnboardingTestMessage(lastOnboardingTestQuestion, lastOnboardingTestImage);
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Não foi possível aplicar a correção.');
     } finally {
@@ -3381,6 +3417,12 @@ export default function Home() {
                           )}
                           {onboardingTestMessages.map((message) => (
                             <div key={message.id} className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'customer' ? 'self-end bg-emerald-600 text-white' : 'self-start border border-slate-700 bg-slate-900 text-slate-100'}`}>
+                              {message.attachmentName && (
+                                <div className="mb-2 flex items-center gap-2 rounded-xl bg-black/15 px-3 py-2 text-xs font-semibold">
+                                  <Paperclip size={14} />
+                                  <span className="truncate">{message.attachmentName}</span>
+                                </div>
+                              )}
                               <p className="whitespace-pre-line">{message.text}</p>
                             </div>
                           ))}
@@ -3395,9 +3437,22 @@ export default function Home() {
                           </div>
                         )}
 
-                        <div className="flex gap-2 border-t border-[#26344D] p-3">
-                          <textarea value={onboardingTestInput} onChange={(event) => setOnboardingTestInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendOnboardingTestMessage(); } }} rows={2} placeholder="Escreva como se fosse um cliente..." className="min-h-[52px] flex-1 resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" />
-                          <button type="button" onClick={() => void sendOnboardingTestMessage()} disabled={!onboardingTestInput.trim() || onboardingTestPending} className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-xl bg-emerald-600 text-white disabled:bg-slate-700" aria-label="Enviar teste"><Send size={18} /></button>
+                        <div className="border-t border-[#26344D] p-3">
+                          {onboardingTestImage && (
+                            <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+                              <span className="flex min-w-0 items-center gap-2"><Paperclip size={14} /><span className="truncate">{onboardingTestImage.name}</span></span>
+                              <button type="button" onClick={() => setOnboardingTestImage(null)} className="font-bold text-slate-300 hover:text-white">Remover</button>
+                            </div>
+                          )}
+                          {onboardingTestImageError && <p className="mb-2 text-xs font-medium text-rose-300">{onboardingTestImageError}</p>}
+                          <div className="flex gap-2">
+                            <label className="inline-flex h-[52px] w-[52px] shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-300 transition hover:border-emerald-500 hover:text-white" aria-label="Adicionar imagem">
+                              <Paperclip size={19} />
+                              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="sr-only" onChange={(event) => { handleOnboardingTestImage(event.target.files?.[0]); event.currentTarget.value = ''; }} />
+                            </label>
+                            <textarea value={onboardingTestInput} onChange={(event) => setOnboardingTestInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendOnboardingTestMessage(); } }} rows={2} placeholder="Escreva como se fosse um cliente ou envie uma imagem..." className="min-h-[52px] flex-1 resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" />
+                            <button type="button" onClick={() => void sendOnboardingTestMessage()} disabled={(!onboardingTestInput.trim() && !onboardingTestImage) || onboardingTestPending} className="inline-flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white disabled:bg-slate-700" aria-label="Enviar teste"><Send size={18} /></button>
+                          </div>
                         </div>
                       </section>
 
