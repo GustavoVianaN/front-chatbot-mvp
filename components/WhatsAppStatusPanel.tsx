@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { Copy, RefreshCw, ShieldCheck } from 'lucide-react';
 import type { WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
+import { disconnectWhatsappCloud } from '@/lib/api';
 import { toast } from '@/components/Toast';
+import MetaEmbeddedSignupButton from '@/components/MetaEmbeddedSignupButton';
 
 type WhatsAppStatusPanelProps = {
   status: WhatsAppStatus;
@@ -31,6 +33,7 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
   );
   const [refreshing, setRefreshing] = useState(false);
   const [startingWeb, setStartingWeb] = useState(false);
+  const [disconnectingCloud, setDisconnectingCloud] = useState(false);
   const bellaTitle = webConnected
     ? 'WhatsApp conectado e pronto para receber mensagens.'
     : webWaitingQr
@@ -82,6 +85,21 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
     }
   };
 
+  const handleDisconnectCloud = async () => {
+    if (disconnectingCloud || loading) return;
+
+    setDisconnectingCloud(true);
+    try {
+      await disconnectWhatsappCloud();
+      await onRefresh();
+      toast('WhatsApp oficial desconectado.');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível desconectar agora.');
+    } finally {
+      setDisconnectingCloud(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">
@@ -125,38 +143,56 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
           </div>
         </div>
 
-        {/*
-          Card "API oficial Meta" comentado por hora — por decisão do
-          produto, nesta fase só o canal WhatsApp Web (Baileys) é usado.
-          Código mantido intacto para reativar depois: descomente o bloco
-          abaixo e volte o grid para `xl:grid-cols-2`.
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">API oficial Meta</p>
-                <h3 className="mt-2 text-lg font-semibold text-white">{status.connected ? 'Conectada' : 'Não conectada'}</h3>
-              </div>
-              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.connected ? 'bg-emerald-500/10 text-emerald-200' : 'bg-slate-800 text-slate-300'}`}>
-                {status.webhookStatus}
-              </span>
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {[
-                { label: 'Número conectado', value: status.number },
-                { label: 'Phone Number ID', value: status.phoneNumberId },
-                { label: 'Token configurado', value: status.tokenConfigured ? 'Sim' : 'Não' },
-                { label: 'Assinatura Meta', value: status.metaSubscription },
-              ].map((item) => (
-                <div key={item.label} className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
-                  <p className="mt-3 break-words text-sm font-semibold text-white">{item.value || 'Não configurado'}</p>
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          {status.cloudApi.embeddedSignupAvailable && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">API oficial Meta</p>
+                  <h3 className="mt-2 text-lg font-semibold text-white">{status.cloudApi.connectedByEmbeddedSignup ? 'Conectada' : 'Não conectada'}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                    {status.cloudApi.connectedByEmbeddedSignup
+                      ? 'Este número usa a API oficial do WhatsApp — sem risco de banimento por automação não-oficial.'
+                      : 'Conecte o número oficial do WhatsApp Business da sua empresa pela própria Meta, sem sair do painel.'}
+                  </p>
                 </div>
-              ))}
+                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${status.cloudApi.connectedByEmbeddedSignup ? 'bg-emerald-500/10 text-emerald-200' : 'bg-slate-800 text-slate-300'}`}>
+                  {status.cloudApi.connectedByEmbeddedSignup ? 'Ativa' : 'Inativa'}
+                </span>
+              </div>
+
+              {status.cloudApi.connectedByEmbeddedSignup ? (
+                <div className="mt-5 space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Phone Number ID</p>
+                      <p className="mt-3 break-words text-sm font-semibold text-white">{status.phoneNumberId || 'Não configurado'}</p>
+                    </div>
+                    <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Business Account ID</p>
+                      <p className="mt-3 break-words text-sm font-semibold text-white">{status.cloudApi.businessAccountId || 'Não configurado'}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleDisconnectCloud()}
+                    disabled={loading || disconnectingCloud}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:text-slate-500"
+                  >
+                    {disconnectingCloud ? 'Desconectando...' : 'Desconectar'}
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-5">
+                  <MetaEmbeddedSignupButton
+                    metaAppId={status.cloudApi.metaAppId!}
+                    metaConfigId={status.cloudApi.metaConfigId!}
+                    onConnected={onRefresh}
+                  />
+                </div>
+              )}
             </div>
-          </div>
-        */}
-        <div className="mt-6 grid gap-4">
+          )}
           <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>

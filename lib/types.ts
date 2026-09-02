@@ -413,6 +413,16 @@ export type WhatsAppStatus = {
   metaSubscription: 'Pendente' | 'Verificada';
   environment: 'produção';
   web: WhatsAppWebStatus;
+  // Conexão por empresa via Embedded Signup da Meta — API oficial
+  // multi-tenant, alternativa ao WhatsApp Web (Baileys).
+  cloudApi: {
+    connectedByEmbeddedSignup: boolean;
+    connectedAt: string | null;
+    businessAccountId: string | null;
+    embeddedSignupAvailable: boolean;
+    metaAppId: string | null;
+    metaConfigId: string | null;
+  };
 };
 
 export type Settings = {
