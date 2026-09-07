@@ -8,9 +8,9 @@ function formatBrl(value: number) {
 }
 
 const benefits = [
-  { icon: Clock3, title: 'Atendimento instantâneo', description: 'Responda dúvidas frequentes mesmo quando sua equipe estiver offline.' },
-  { icon: Sparkles, title: 'Conhece sua empresa', description: 'Ensine seus produtos, serviços, horários e regras para a Bella responder corretamente.' },
-  { icon: Headphones, title: 'Sua equipe assume quando precisar', description: 'A Bella identifica quando deve parar e transfere a conversa para sua equipe com o contexto completo.' },
+  { icon: Clock3, title: 'Treine conversando', description: 'Explique como sua empresa trabalha e a BellAI transforma a conversa em configuração de atendimento.' },
+  { icon: Sparkles, title: 'Teste, corrija e compare', description: 'Simule situações reais, ensine a resposta certa e valide o resultado antes de atender clientes.' },
+  { icon: Headphones, title: 'Melhoria com controle', description: 'Acompanhe aprendizados, aprove respostas e desfaça mudanças sem editar comandos técnicos.' },
 ];
 
 export default async function WelcomePage() {
@@ -51,9 +51,9 @@ export default async function WelcomePage() {
         <div aria-hidden="true" className="absolute -right-40 top-10 h-96 w-96 rounded-full bg-[#ECFDF5] blur-3xl" />
         <div className="relative mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl items-center gap-14 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[1.04fr_.96fr] lg:gap-16 lg:px-12 lg:py-24 xl:py-28">
           <div>
-            <p className="landing-enter landing-enter-eyebrow mb-5 text-xs font-bold uppercase tracking-[0.18em] text-[#079669] sm:text-sm">Atendimento com IA para WhatsApp</p>
-            <h1 className="landing-enter landing-enter-title max-w-[680px] text-[2.55rem] font-bold leading-[1.07] tracking-[-0.045em] text-[#101828] sm:text-5xl lg:text-[3.75rem] xl:text-[4rem]">Seu WhatsApp atendendo clientes 24 horas por dia.</h1>
-            <p className="landing-enter landing-enter-copy mt-6 max-w-[620px] text-lg leading-8 text-[#667085] lg:text-xl">Com a BellAI Connect, a Bella responde dúvidas, qualifica clientes e organiza pedidos automaticamente e chama sua equipe quando necessário.</p>
+            <p className="landing-enter landing-enter-eyebrow mb-5 text-xs font-bold uppercase tracking-[0.18em] text-[#079669] sm:text-sm">Treinamento e controle para atendimento com IA</p>
+            <h1 className="landing-enter landing-enter-title max-w-[680px] text-[2.55rem] font-bold leading-[1.07] tracking-[-0.045em] text-[#101828] sm:text-5xl lg:text-[3.75rem] xl:text-[4rem]">Ensine, teste e melhore seu atendimento conversando.</h1>
+            <p className="landing-enter landing-enter-copy mt-6 max-w-[620px] text-lg leading-8 text-[#667085] lg:text-xl">A BellAI aprende o processo da sua empresa, permite testar cada resposta antes de publicar e mostra onde o atendimento pode melhorar.</p>
             <div className="landing-enter landing-enter-actions mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <a href="/signup" className="landing-cta inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-[#059669] px-7 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-[#047857] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#079669] focus-visible:ring-offset-4">Começar grátis <ArrowRight aria-hidden="true" size={18} className="landing-cta-arrow" /></a>
               <a href="#como-funciona" className="inline-flex min-h-13 items-center justify-center rounded-xl border border-[#D0D5DD] bg-white px-7 py-3.5 text-base font-semibold text-[#344054] transition hover:border-[#98A2B3] hover:bg-[#F9FAFB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#079669] focus-visible:ring-offset-4">Ver como funciona</a>
@@ -87,8 +87,8 @@ export default async function WelcomePage() {
         <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-28">
           <Reveal className="mx-auto max-w-3xl text-center">
             <div className="mx-auto mb-5 grid h-11 w-11 place-items-center rounded-xl bg-[#ECFDF5] text-[#079669]"><ShieldCheck aria-hidden="true" size={22} /></div>
-            <h2 className="text-2xl font-bold tracking-[-0.03em] sm:text-3xl">Automatize o primeiro atendimento sem perder o controle da conversa.</h2>
-            <p className="mt-4 text-base leading-7 text-[#667085]">A Bella cuida do trabalho repetitivo e deixa sua equipe livre para as conversas que realmente precisam de atenção.</p>
+            <h2 className="text-2xl font-bold tracking-[-0.03em] sm:text-3xl">Sua empresa ensina. A BellAI configura, testa e aprende.</h2>
+            <p className="mt-4 text-base leading-7 text-[#667085]">Você mantém o controle das respostas e melhora o atendimento usando exemplos reais, sem precisar escrever prompts ou regras técnicas.</p>
           </Reveal>
           <div className="mt-14 grid gap-5 md:grid-cols-3">
             {benefits.map(({ icon: Icon, title, description }, index) => (

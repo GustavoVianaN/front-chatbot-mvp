@@ -324,6 +324,11 @@ export type SimulationLog = {
   conversation_context: string;
   assistant_name: string;
   company_name: string;
+  feedback_status: 'pending' | 'approved' | 'corrected' | 'needs_revision' | 'reverted';
+  feedback_text: string;
+  corrected_response: string;
+  reviewed_at: string;
+  reverted_at: string;
   created_at: string;
 };
 
@@ -370,6 +375,18 @@ export type DashboardSummary = {
   recentErrors: number;
   lastMessage: string;
   estimatedUsage: string;
+  quality: {
+    periodDays: number;
+    totalTests: number;
+    approvedTests: number;
+    correctedTests: number;
+    pendingTests: number;
+    approvalRate: number;
+    handoffsToday: number;
+    buyingIntentToday: number;
+    unansweredToday: number;
+    insights: string[];
+  };
 };
 
 export type CompanyIntakeFile = {

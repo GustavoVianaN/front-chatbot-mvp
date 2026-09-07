@@ -19,8 +19,8 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateBotTestResponse, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
-import type { AuthUser, AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeDescriptionAudio, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
+import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateBotTestResponse, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getSimulationLogs, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, reviewSimulation, revertSimulationCorrection, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import type { AuthUser, AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeDescriptionAudio, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, SimulationLog, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import MetricCard from '@/components/MetricCard';
@@ -33,6 +33,7 @@ import WhatsAppStatusPanel from '@/components/WhatsAppStatusPanel';
 import SettingsPanel from '@/components/SettingsPanel';
 import BellaAssistant from '@/components/BellaAssistant';
 import { toast } from '@/components/Toast';
+import { interpretOnboardingCorrection, keepOnlyLatestRetest } from '@/lib/onboarding-correction';
 
 const sections = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -77,6 +78,7 @@ type OnboardingTestMessage = {
   role: 'customer' | 'bot';
   text: string;
   attachmentName?: string;
+  retest?: boolean;
 };
 type OnboardingCorrectionMessage = {
   id: string;
@@ -598,6 +600,7 @@ export default function Home() {
   const [productItems, setProductItems] = useState<ProductItem[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationConnection[]>([]);
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
+  const [simulationLogs, setSimulationLogs] = useState<SimulationLog[]>([]);
   const [disconnectEvents, setDisconnectEvents] = useState<WhatsAppDisconnectEvent[]>([]);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -689,6 +692,13 @@ export default function Home() {
   const [lastOnboardingTestQuestion, setLastOnboardingTestQuestion] = useState('');
   const [lastOnboardingTestResponse, setLastOnboardingTestResponse] = useState('');
   const [lastOnboardingTestImage, setLastOnboardingTestImage] = useState<File | null>(null);
+  const [lastOnboardingTestRawMessage, setLastOnboardingTestRawMessage] = useState('');
+  const [lastOnboardingTestLogId, setLastOnboardingTestLogId] = useState('');
+  const [lastCorrectionLogId, setLastCorrectionLogId] = useState('');
+  const [onboardingTestMode, setOnboardingTestMode] = useState<'testing' | 'correcting' | 'applying'>('testing');
+  const [pendingCorrectionTarget, setPendingCorrectionTarget] = useState<'welcome_message' | null>(null);
+  const onboardingTestScrollRef = useRef<HTMLDivElement | null>(null);
+  const onboardingCorrectionScrollRef = useRef<HTMLDivElement | null>(null);
   const [onboardingDraft, setOnboardingDraft] = useState({
     company_name: '',
     segment: '',
@@ -706,6 +716,16 @@ export default function Home() {
   const lastAnalyzedCompanyIntakeKeyRef = useRef('');
   const companyGuidedScrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
+    const container = onboardingTestScrollRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
+  }, [onboardingTestMessages, onboardingTestPending]);
+
+  useEffect(() => {
+    const container = onboardingCorrectionScrollRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
+  }, [onboardingCorrectionMessages, onboardingCorrectionPending]);
+
+  useEffect(() => {
     if (onboardingMode === 'wizard') {
       setShowSecondBellaText(false);
     }
@@ -714,7 +734,7 @@ export default function Home() {
   const loadPanel = async () => {
     try {
       setPending(true);
-      const [userData, dashboardData, convos, config, knowledgeData, knowledgeFilesData, knowledgeSourcesData, knowledgeStatusData, productItemsData, integrationData, rulesData, whatsappEvents, whatsapp, settingsData] = await Promise.all([
+      const [userData, dashboardData, convos, config, knowledgeData, knowledgeFilesData, knowledgeSourcesData, knowledgeStatusData, productItemsData, integrationData, rulesData, simulationData, whatsappEvents, whatsapp, settingsData] = await Promise.all([
         getCurrentUser(),
         getDashboard(),
         getConversations(),
@@ -726,6 +746,7 @@ export default function Home() {
         getProductItems(),
         getIntegrationConnections(),
         getAutomationRules(),
+        getSimulationLogs(),
         getWhatsappDisconnectEvents(),
         getWhatsappStatus(),
         getSettings(),
@@ -742,6 +763,7 @@ export default function Home() {
       setProductItems(productItemsData);
       setIntegrations(integrationData);
       setAutomationRules(rulesData);
+      setSimulationLogs(simulationData);
       setDisconnectEvents(whatsappEvents);
       setWhatsappStatus(whatsapp);
       setSettings(settingsData);
@@ -1258,6 +1280,21 @@ export default function Home() {
   const handleRefresh = async () => {
     await loadPanel();
     toast('Dados atualizados.');
+  };
+
+  const handleRevertQualityRevision = async (logId: string) => {
+    if (pending) return;
+    try {
+      setPending(true);
+      const restored = await revertSimulationCorrection(logId);
+      setBotConfig(restored);
+      await loadPanel();
+      toast('Melhoria desfeita e configuração anterior restaurada.');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível desfazer esta melhoria.');
+    } finally {
+      setPending(false);
+    }
   };
 
   const appendCompanyIntakeFiles = (
@@ -2375,6 +2412,7 @@ export default function Home() {
   };
 
   const handleOnboardingTestImage = (file?: File) => {
+    if (onboardingTestMode !== 'testing') return;
     setOnboardingTestImageError('');
     if (!file) return setOnboardingTestImage(null);
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mimeTypeForFile(file))) {
@@ -2393,7 +2431,7 @@ export default function Home() {
   const sendOnboardingTestMessage = async (suggestedMessage?: string, suggestedImage?: File | null) => {
     const message = (suggestedMessage || onboardingTestInput).trim();
     const imageToSend = suggestedImage === undefined ? onboardingTestImage : suggestedImage;
-    if ((!message && !imageToSend) || !botConfig || onboardingTestPending) return;
+    if ((!message && !imageToSend) || !botConfig || onboardingTestPending || onboardingTestMode !== 'testing') return;
     const testSituation = message || `Imagem enviada pelo cliente: ${imageToSend?.name || 'imagem'}`;
 
     const customerMessage: OnboardingTestMessage = {
@@ -2407,6 +2445,7 @@ export default function Home() {
     setOnboardingTestInput('');
     setOnboardingTestImage(null);
     setOnboardingTestImageError('');
+    setPendingCorrectionTarget(null);
     setOnboardingTestPending(true);
 
     try {
@@ -2421,8 +2460,11 @@ export default function Home() {
       setOnboardingTestSimulationId(result.simulationId);
       setOnboardingTestMessages((current) => [...current, { id: `bot-${Date.now()}`, role: 'bot', text: result.response }]);
       setLastOnboardingTestQuestion(testSituation);
+      setLastOnboardingTestRawMessage(message);
       setLastOnboardingTestResponse(result.response);
+      setLastOnboardingTestLogId(result.log.id);
       setLastOnboardingTestImage(imageToSend || null);
+      setOnboardingTestMode('testing');
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Não foi possível testar o assistente agora.');
     } finally {
@@ -2432,7 +2474,7 @@ export default function Home() {
 
   const applyOnboardingCorrection = async () => {
     const correction = onboardingCorrectionInput.trim();
-    if (!correction || !botConfig || onboardingCorrectionPending) return;
+    if (!correction || !botConfig || onboardingCorrectionPending || onboardingTestMode !== 'correcting') return;
     if (!lastOnboardingTestQuestion || !lastOnboardingTestResponse) {
       toast('Faça primeiro uma pergunta no chat de teste.');
       return;
@@ -2441,28 +2483,136 @@ export default function Home() {
     setOnboardingCorrectionMessages((current) => [...current, { id: `correction-user-${Date.now()}`, role: 'user', text: correction }]);
     setOnboardingCorrectionInput('');
     setOnboardingCorrectionPending(true);
+    setOnboardingTestMode('applying');
 
     try {
-      const correctionRule = [
-        'CORREÇÃO APROVADA EM TESTE:',
-        `Pergunta ou situação do cliente: ${lastOnboardingTestQuestion}`,
-        `Resposta que não ficou adequada: ${lastOnboardingTestResponse}`,
-        `Como deve responder ou agir: ${correction}`,
-      ].join('\n');
-      const updated = await updateBotConfig({
-        ...botConfig,
-        response_rules: [botConfig.response_rules?.trim() || requiredResponseRules, correctionRule].filter(Boolean).join('\n\n'),
+      const changes: Partial<BotConfig> = {};
+      let appliedMessage = 'A orientação foi adicionada às regras de atendimento.';
+      const interpretation = interpretOnboardingCorrection({
+        correction,
+        testedMessage: lastOnboardingTestRawMessage,
+        botResponse: lastOnboardingTestResponse,
+        hasImage: Boolean(lastOnboardingTestImage),
+        pendingWelcome: pendingCorrectionTarget === 'welcome_message',
       });
+      const changesWelcome = interpretation.action === 'welcome_message' || interpretation.action === 'clarify_welcome';
+
+      if (interpretation.action === 'clarify_welcome') {
+          setPendingCorrectionTarget('welcome_message');
+          setOnboardingCorrectionMessages((current) => [...current, {
+            id: `correction-clarify-${Date.now()}`,
+            role: 'bella',
+            text: 'Entendi que você quer mudar a mensagem inicial. Escreva agora a mensagem completa, exatamente como ela deve aparecer para o cliente.',
+          }]);
+          setOnboardingTestMode('correcting');
+          return;
+      }
+
+      if (interpretation.action === 'welcome_message') {
+        changes.welcome_message = interpretation.value;
+        setPendingCorrectionTarget(null);
+        appliedMessage = 'Atualizei a mensagem inicial do assistente.';
+      } else if (interpretation.action === 'analyze_images') {
+        changes.analyze_images = true;
+        appliedMessage = 'Ativei a análise de imagens para o assistente.';
+      } else {
+        const correctionRule = [
+          'CORREÇÃO APROVADA EM TESTE:',
+          `Pergunta ou situação do cliente: ${lastOnboardingTestQuestion}`,
+          `Resposta que não ficou adequada: ${lastOnboardingTestResponse}`,
+          `Como deve responder ou agir: ${interpretation.value}`,
+        ].join('\n');
+        changes.response_rules = [botConfig.response_rules?.trim() || requiredResponseRules, correctionRule].filter(Boolean).join('\n\n');
+      }
+
+      const configBefore = botConfig;
+      const updated = await updateBotConfig({ ...botConfig, ...changes });
       setBotConfig(updated);
       setOnboardingCorrectionMessages((current) => [...current, {
         id: `correction-bella-${Date.now()}`,
         role: 'bella',
-        text: 'Entendi e apliquei essa orientação ao assistente. Vou repetir a mesma pergunta no teste para você comparar a nova resposta.',
+        text: `${appliedMessage} Agora vou repetir exatamente o mesmo teste para você comparar a resposta.`,
       }]);
-      setOnboardingTestSimulationId(undefined);
-      await sendOnboardingTestMessage(lastOnboardingTestQuestion, lastOnboardingTestImage);
+
+      const attachment = lastOnboardingTestImage ? {
+        original_filename: lastOnboardingTestImage.name,
+        mime_type: mimeTypeForFile(lastOnboardingTestImage),
+        size_bytes: lastOnboardingTestImage.size,
+        data_url: await readFileAsDataUrl(lastOnboardingTestImage),
+      } : undefined;
+      const result = await generateBotTestResponse(updated, lastOnboardingTestRawMessage, '', undefined, attachment);
+      setOnboardingTestSimulationId(result.simulationId);
+      setOnboardingTestMessages((current) => keepOnlyLatestRetest(current, {
+        id: `bot-retest-${Date.now()}`,
+        role: 'bot',
+        text: result.response,
+        retest: true,
+      }));
+      setLastOnboardingTestResponse(result.response);
+      const responseUnchanged = result.response === lastOnboardingTestResponse;
+      if (lastOnboardingTestLogId) {
+        await reviewSimulation(lastOnboardingTestLogId, {
+          status: responseUnchanged ? 'needs_revision' : 'corrected',
+          feedbackText: correction,
+          correctedResponse: result.response,
+          configBefore,
+          configAfter: updated,
+        });
+        setLastCorrectionLogId(lastOnboardingTestLogId);
+      }
+      setLastOnboardingTestLogId(result.log.id);
+      setOnboardingCorrectionMessages((current) => [...current, {
+        id: `correction-verified-${Date.now()}`,
+        role: 'bella',
+        text: responseUnchanged
+          ? 'A configuração foi alterada, mas a resposta ainda ficou igual. Não vou considerar essa melhoria resolvida; você pode me explicar de outra forma.'
+          : 'O reteste foi concluído e a nova resposta já aparece no chat ao lado. Confira se agora ficou correta.',
+      }]);
+      if (responseUnchanged) {
+        if (changesWelcome) setPendingCorrectionTarget('welcome_message');
+        setOnboardingTestMode('correcting');
+      } else {
+        setOnboardingTestMode('testing');
+      }
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Não foi possível aplicar a correção.');
+      setOnboardingCorrectionMessages((current) => [...current, {
+        id: `correction-error-${Date.now()}`,
+        role: 'bella',
+        text: error instanceof Error ? error.message : 'Não consegui aplicar essa melhoria. Tente explicar novamente.',
+      }]);
+      setOnboardingTestMode('correcting');
+    } finally {
+      setOnboardingCorrectionPending(false);
+    }
+  };
+
+  const approveLatestOnboardingTest = async () => {
+    if (!lastOnboardingTestLogId || onboardingTestMode !== 'testing') return;
+    try {
+      await reviewSimulation(lastOnboardingTestLogId, { status: 'approved' });
+      toast('Resposta aprovada e registrada no histórico de qualidade.');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível aprovar esta resposta.');
+    }
+  };
+
+  const undoLastOnboardingCorrection = async () => {
+    if (!lastCorrectionLogId || onboardingCorrectionPending) return;
+    setOnboardingCorrectionPending(true);
+    try {
+      const restored = await revertSimulationCorrection(lastCorrectionLogId);
+      setBotConfig(restored);
+      setLastCorrectionLogId('');
+      setOnboardingCorrectionMessages((current) => [...current, {
+        id: `correction-reverted-${Date.now()}`,
+        role: 'bella',
+        text: 'Desfiz a última melhoria e restaurei a configuração anterior.',
+      }]);
+      setOnboardingTestMode('testing');
+      toast('Última melhoria desfeita.');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível desfazer a melhoria.');
     } finally {
       setOnboardingCorrectionPending(false);
     }
@@ -3396,7 +3546,7 @@ export default function Home() {
                     </div>
 
                     <div className="grid gap-4 lg:grid-cols-2">
-                      <section className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-[#26344D] bg-[#080F20]">
+                      <section className={`flex h-[620px] min-h-0 flex-col overflow-hidden rounded-2xl border bg-[#080F20] transition ${onboardingTestMode === 'testing' ? 'border-emerald-500/40' : 'border-[#26344D] opacity-70'}`}>
                         <div className="border-b border-[#26344D] px-4 py-4">
                           <div className="flex items-center gap-3">
                             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300"><Bot size={20} /></span>
@@ -3407,12 +3557,13 @@ export default function Home() {
                           </div>
                         </div>
 
-                        <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+                        <div ref={onboardingTestScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth p-4">
+                          <div className="flex min-h-full flex-col gap-3">
                           {onboardingTestMessages.length === 0 && (
                             <div className="m-auto max-w-sm text-center">
                               <MessageCircle className="mx-auto text-slate-600" size={28} />
                               <p className="mt-3 text-sm font-semibold text-slate-300">Comece com uma pergunta real</p>
-                              <p className="mt-1 text-xs leading-5 text-slate-500">Use um cenário sugerido ou escreva algo que seus clientes perguntam.</p>
+                              <p className="mt-1 text-xs leading-5 text-slate-500">Escreva algo que seus clientes perguntam ou envie uma imagem.</p>
                             </div>
                           )}
                           {onboardingTestMessages.map((message) => (
@@ -3423,21 +3574,28 @@ export default function Home() {
                                   <span className="truncate">{message.attachmentName}</span>
                                 </div>
                               )}
+                              {message.retest && <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-emerald-300">Resposta após a correção</p>}
                               <p className="whitespace-pre-line">{message.text}</p>
                             </div>
                           ))}
                           {onboardingTestPending && <div className="self-start rounded-2xl bg-slate-900 px-4 py-3 text-sm text-slate-400">{botConfig.assistant_name} está respondendo...</div>}
+                          </div>
                         </div>
 
                         {lastOnboardingTestResponse && !onboardingTestPending && (
                           <div className="flex items-center gap-2 border-t border-[#26344D] px-4 py-3">
                             <span className="text-xs text-slate-500">Essa resposta ficou boa?</span>
-                            <button type="button" onClick={() => toast('Ótimo! Resposta aprovada.')} className="rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs font-semibold text-emerald-300">Sim</button>
-                            <button type="button" onClick={() => setOnboardingCorrectionMessages((current) => [...current, { id: `bella-help-${Date.now()}`, role: 'bella', text: 'Me diga com suas palavras o que ficou errado e como o assistente deveria agir nessa situação.' }])} className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-200">Quero corrigir</button>
+                            <button type="button" onClick={() => void approveLatestOnboardingTest()} disabled={onboardingTestMode !== 'testing' || !lastOnboardingTestLogId} className="rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs font-semibold text-emerald-300 disabled:opacity-40">Sim</button>
+                            <button type="button" onClick={() => { setOnboardingTestMode('correcting'); setOnboardingCorrectionMessages((current) => [...current, { id: `bella-help-${Date.now()}`, role: 'bella', text: 'Me diga com suas palavras o que ficou errado e como o assistente deveria agir nessa situação.' }]); }} disabled={onboardingTestMode !== 'testing'} className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-200 disabled:opacity-40">Quero corrigir</button>
                           </div>
                         )}
 
                         <div className="border-t border-[#26344D] p-3">
+                          {lastCorrectionLogId && onboardingTestMode === 'testing' && (
+                            <button type="button" onClick={() => void undoLastOnboardingCorrection()} disabled={onboardingCorrectionPending} className="mb-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 text-sm font-semibold text-amber-100 hover:bg-amber-400/10 disabled:opacity-50">
+                              <RefreshCw size={15} /> Desfazer última melhoria
+                            </button>
+                          )}
                           {onboardingTestImage && (
                             <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
                               <span className="flex min-w-0 items-center gap-2"><Paperclip size={14} /><span className="truncate">{onboardingTestImage.name}</span></span>
@@ -3446,17 +3604,17 @@ export default function Home() {
                           )}
                           {onboardingTestImageError && <p className="mb-2 text-xs font-medium text-rose-300">{onboardingTestImageError}</p>}
                           <div className="flex gap-2">
-                            <label className="inline-flex h-[52px] w-[52px] shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-300 transition hover:border-emerald-500 hover:text-white" aria-label="Adicionar imagem">
+                            <label className={`inline-flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-300 transition ${onboardingTestMode === 'testing' ? 'cursor-pointer hover:border-emerald-500 hover:text-white' : 'cursor-not-allowed opacity-40'}`} aria-label="Adicionar imagem">
                               <Paperclip size={19} />
-                              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="sr-only" onChange={(event) => { handleOnboardingTestImage(event.target.files?.[0]); event.currentTarget.value = ''; }} />
+                              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={onboardingTestMode !== 'testing'} className="sr-only" onChange={(event) => { handleOnboardingTestImage(event.target.files?.[0]); event.currentTarget.value = ''; }} />
                             </label>
-                            <textarea value={onboardingTestInput} onChange={(event) => setOnboardingTestInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendOnboardingTestMessage(); } }} rows={2} placeholder="Escreva como se fosse um cliente ou envie uma imagem..." className="min-h-[52px] flex-1 resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" />
-                            <button type="button" onClick={() => void sendOnboardingTestMessage()} disabled={(!onboardingTestInput.trim() && !onboardingTestImage) || onboardingTestPending} className="inline-flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white disabled:bg-slate-700" aria-label="Enviar teste"><Send size={18} /></button>
+                            <textarea value={onboardingTestInput} onChange={(event) => setOnboardingTestInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendOnboardingTestMessage(); } }} rows={2} disabled={onboardingTestMode !== 'testing'} placeholder={onboardingTestMode === 'testing' ? 'Escreva como se fosse um cliente ou envie uma imagem...' : 'Conclua a correção com a Bella ao lado.'} className="min-h-[52px] flex-1 resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50" />
+                            <button type="button" onClick={() => void sendOnboardingTestMessage()} disabled={(!onboardingTestInput.trim() && !onboardingTestImage) || onboardingTestPending || onboardingTestMode !== 'testing'} className="inline-flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white disabled:bg-slate-700" aria-label="Enviar teste"><Send size={18} /></button>
                           </div>
                         </div>
                       </section>
 
-                      <section className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-emerald-500/25 bg-[#080F20]">
+                      <section className={`flex h-[620px] min-h-0 flex-col overflow-hidden rounded-2xl border bg-[#080F20] transition ${onboardingTestMode === 'correcting' || onboardingTestMode === 'applying' ? 'border-emerald-500/50' : 'border-[#26344D] opacity-70'}`}>
                         <div className="flex items-center gap-3 border-b border-[#26344D] px-4 py-4">
                           <span className="flex h-10 w-10 overflow-hidden rounded-xl bg-white"><img src="/brand/bella-avatar.png" alt="" className="h-full w-full object-cover" /></span>
                           <div>
@@ -3464,7 +3622,7 @@ export default function Home() {
                             <p className="text-xs text-slate-500">Explique o que deve mudar</p>
                           </div>
                         </div>
-                        <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+                        <div ref={onboardingCorrectionScrollRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth p-4">
                           {onboardingCorrectionMessages.map((message) => (
                             <div key={message.id} className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'self-end bg-emerald-600 text-white' : 'self-start bg-[#111C32] text-slate-200'}`}>
                               <p className="whitespace-pre-line">{message.text}</p>
@@ -3473,8 +3631,8 @@ export default function Home() {
                           {onboardingCorrectionPending && <div className="self-start rounded-2xl bg-[#111C32] px-4 py-3 text-sm text-slate-400">Bella está aplicando a melhoria...</div>}
                         </div>
                         <div className="border-t border-[#26344D] p-3">
-                          <textarea value={onboardingCorrectionInput} onChange={(event) => setOnboardingCorrectionInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void applyOnboardingCorrection(); } }} rows={3} placeholder={lastOnboardingTestResponse ? 'Ex: antes de informar o preço, deve perguntar o modelo...' : 'Faça um teste à esquerda antes de solicitar uma correção.'} disabled={!lastOnboardingTestResponse} className="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-60" />
-                          <button type="button" onClick={() => void applyOnboardingCorrection()} disabled={!onboardingCorrectionInput.trim() || !lastOnboardingTestResponse || onboardingCorrectionPending} className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:bg-slate-700"><Sparkles size={16} />Aplicar melhoria e testar novamente</button>
+                          <textarea value={onboardingCorrectionInput} onChange={(event) => setOnboardingCorrectionInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void applyOnboardingCorrection(); } }} rows={3} placeholder={onboardingTestMode === 'correcting' ? 'Ex: antes de informar o preço, deve perguntar o modelo...' : 'Clique em “Quero corrigir” no chat de teste.'} disabled={!lastOnboardingTestResponse || onboardingTestMode !== 'correcting'} className="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-60" />
+                          <button type="button" onClick={() => void applyOnboardingCorrection()} disabled={!onboardingCorrectionInput.trim() || !lastOnboardingTestResponse || onboardingCorrectionPending || onboardingTestMode !== 'correcting'} className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:bg-slate-700"><Sparkles size={16} />{onboardingCorrectionPending ? 'Aplicando e testando...' : 'Aplicar melhoria e testar novamente'}</button>
                         </div>
                       </section>
                     </div>
@@ -3555,6 +3713,59 @@ export default function Home() {
                 <MetricCard label="Conversas abertas" value={dashboard.openConversations.toString()} />
                 <MetricCard label="Conversas resolvidas" value={dashboard.resolvedConversations.toString()} />
               </div>
+
+              {dashboard.quality && (
+                <div className="overflow-hidden rounded-2xl border border-emerald-500/20 bg-slate-900/80 shadow-panel sm:rounded-3xl">
+                  <div className="border-b border-slate-800 p-4 sm:p-6">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">Inteligência do atendimento</p>
+                    <h2 className="mt-2 text-xl font-semibold text-white">Qualidade que melhora com cada teste</h2>
+                    <p className="mt-2 text-sm text-slate-400">Indicadores dos últimos {dashboard.quality.periodDays} dias e sinais das conversas de hoje.</p>
+                  </div>
+                  <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-6 xl:grid-cols-4">
+                    <MetricCard label="Respostas aprovadas" value={`${dashboard.quality.approvalRate}%`} tone="success" />
+                    <MetricCard label="Melhorias aprendidas" value={dashboard.quality.correctedTests.toString()} tone="success" />
+                    <MetricCard label="Intenções de compra hoje" value={dashboard.quality.buyingIntentToday.toString()} tone="neutral" />
+                    <MetricCard label="Precisaram da equipe" value={dashboard.quality.handoffsToday.toString()} tone={dashboard.quality.handoffsToday > 0 ? 'warning' : 'neutral'} />
+                  </div>
+                  <div className="grid gap-3 border-t border-slate-800 p-4 sm:p-6 lg:grid-cols-3">
+                    {dashboard.quality.insights.map((insight) => (
+                      <div key={insight} className="rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-slate-300">{insight}</div>
+                    ))}
+                  </div>
+                  <div className="border-t border-slate-800 p-4 sm:p-6">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-white">Histórico de aprendizado</p>
+                        <p className="mt-1 text-xs text-slate-500">Veja o que foi testado, corrigido e aprovado. Mudanças corrigidas podem ser desfeitas.</p>
+                      </div>
+                      <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300">{simulationLogs.length} testes</span>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {simulationLogs.slice(0, 5).map((log) => (
+                        <div key={log.id} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${log.feedback_status === 'approved' ? 'bg-emerald-500/15 text-emerald-300' : log.feedback_status === 'corrected' ? 'bg-sky-500/15 text-sky-300' : log.feedback_status === 'reverted' ? 'bg-slate-700 text-slate-300' : 'bg-amber-500/15 text-amber-200'}`}>
+                                  {log.feedback_status === 'approved' ? 'Aprovado' : log.feedback_status === 'corrected' ? 'Melhoria aplicada' : log.feedback_status === 'reverted' ? 'Desfeito' : log.feedback_status === 'needs_revision' ? 'Precisa revisar' : 'Aguardando avaliação'}
+                                </span>
+                                <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString('pt-BR')}</span>
+                              </div>
+                              <p className="mt-3 text-sm font-medium text-slate-200">Cliente: {log.user_message}</p>
+                              <p className="mt-1 line-clamp-2 text-sm text-slate-400">Resposta: {log.corrected_response || log.bot_response}</p>
+                              {log.feedback_text && <p className="mt-2 text-xs text-sky-300">Orientação: {log.feedback_text}</p>}
+                            </div>
+                            {log.feedback_status === 'corrected' && (
+                              <button type="button" onClick={() => void handleRevertQualityRevision(log.id)} disabled={pending} className="shrink-0 rounded-xl border border-amber-400/30 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-400/10 disabled:opacity-50">Desfazer</button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {simulationLogs.length === 0 && <p className="rounded-2xl border border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-500">Os testes e aprendizados do assistente aparecerão aqui.</p>}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-4 xl:gap-6">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-panel sm:rounded-3xl sm:p-6">

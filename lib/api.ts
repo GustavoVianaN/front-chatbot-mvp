@@ -401,6 +401,26 @@ export async function getSimulationLogs(): Promise<SimulationLog[]> {
   return apiRequest('/simulation-logs');
 }
 
+export async function reviewSimulation(id: string, data: {
+  status: 'approved' | 'corrected' | 'needs_revision';
+  feedbackText?: string;
+  correctedResponse?: string;
+  configBefore?: BotConfig;
+  configAfter?: BotConfig;
+}): Promise<SimulationLog> {
+  return apiRequest(`/simulation-logs/${id}/review`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function revertSimulationCorrection(id: string): Promise<BotConfig> {
+  return apiRequest(`/simulation-logs/${id}/revert`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 export async function askBella(message: string, conversationContext: Array<{ role: 'user' | 'assistant'; text: string }>) {
   return apiRequest<{ response: string }>('/panel-assistant/message', {
     method: 'POST',
