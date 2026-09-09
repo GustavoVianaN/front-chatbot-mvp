@@ -16,6 +16,12 @@ type MetaEmbeddedSignupButtonProps = {
 // enquanto o popup do Facebook está aberto — é assim que sabemos QUAL
 // WABA/número a pessoa conectou, já que o "code" do FB.login() sozinho não
 // carrega essa informação (só serve pra trocar por token depois).
+//
+// Existem dois desfechos possíveis:
+//  - `FINISH`: fluxo padrão, número novo — vem com waba_id E phone_number_id.
+//  - `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`: Coexistence, número já ativo
+//    no app WhatsApp Business — vem só com waba_id (o backend resolve o
+//    phone_number_id consultando a WABA depois).
 type EmbeddedSignupMessage = {
   type: string;
   event: string;
@@ -37,7 +43,12 @@ declare global {
           config_id: string;
           response_type: 'code';
           override_default_response_type: true;
-          extras?: { sessionInfoVersion?: string };
+          // `featureType: 'whatsapp_business_app_onboarding'` é o que faz a
+          // Meta oferecer a tela "conectar sua conta existente do WhatsApp
+          // Business app" (Coexistence) dentro do popup — sem isso, a pessoa
+          // só vê a opção de número novo e esbarra no erro de "número já
+          // registrado" quando o número dela já está no app.
+          extras?: { sessionInfoVersion?: string; featureType?: 'whatsapp_business_app_onboarding' };
         }
       ) => void;
     };
@@ -107,11 +118,15 @@ function loadFacebookSdk(): Promise<void> {
   });
 }
 
-async function waitForSignupAssets(ref: { current: { wabaId?: string; phoneNumberId?: string } }) {
+type SignupAssets = { wabaId?: string; phoneNumberId?: string; coexistence?: boolean };
+
+async function waitForSignupAssets(ref: { current: SignupAssets }) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < SIGNUP_ASSETS_TIMEOUT_MS) {
-    const { wabaId, phoneNumberId } = ref.current;
-    if (wabaId && phoneNumberId) return { wabaId, phoneNumberId };
+    const { wabaId, phoneNumberId, coexistence } = ref.current;
+    // Coexistence fecha com só o waba_id (o phone_number_id é resolvido no
+    // backend) — não dá pra esperar os dois campos como no fluxo padrão.
+    if (wabaId && (phoneNumberId || coexistence)) return ref.current;
     await new Promise((resolve) => window.setTimeout(resolve, 50));
   }
   return ref.current;
@@ -126,7 +141,7 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, grap
   // Guarda o waba_id/phone_number_id assim que chegam pelo postMessage,
   // para combinar com o "code" do FB.login() quando os dois estiverem
   // disponíveis (a ordem entre os dois eventos não é garantida).
-  const signupAssetsRef = useRef<{ wabaId?: string; phoneNumberId?: string }>({});
+  const signupAssetsRef = useRef<SignupAssets>({});
 
   // Carrega o SDK e já inicializa assim que o componente aparece na tela —
   // NUNCA dentro do clique. Se o carregamento (mesmo que rápido) acontecer
@@ -171,6 +186,15 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, grap
           phoneNumberId: payload.data.phone_number_id,
         };
       }
+
+      // Coexistence: a pessoa conectou o número que já usa no app WhatsApp
+      // Business. Só vem o waba_id — sem phone_number_id.
+      if (payload.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' && payload.data) {
+        signupAssetsRef.current = {
+          wabaId: payload.data.waba_id,
+          coexistence: true,
+        };
+      }
     }
 
     window.addEventListener('message', handleMessage);
@@ -180,8 +204,12 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, grap
   async function handleClick() {
     if (connecting) return;
 
-    if (!/^\d{6}$/.test(registrationPin)) {
-      toast('Crie um PIN de segurança com exatamente 6 números.');
+    // O PIN só é obrigatório no fluxo padrão (número novo, registrado na
+    // hora). Se a pessoa conectar um número que já está no app WhatsApp
+    // Business (Coexistence), não existe registro/PIN — deixa em branco e o
+    // backend resolve sozinho. Só bloqueia aqui um PIN parcial/inválido.
+    if (registrationPin.length > 0 && !/^\d{6}$/.test(registrationPin)) {
+      toast('O PIN de segurança precisa ter exatamente 6 números (ou deixe em branco se seu número já está no app do WhatsApp Business).');
       return;
     }
 
@@ -209,7 +237,7 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, grap
           config_id: metaConfigId,
           response_type: 'code',
           override_default_response_type: true,
-          extras: { sessionInfoVersion: '3' },
+          extras: { sessionInfoVersion: '3', featureType: 'whatsapp_business_app_onboarding' },
         });
       });
 
@@ -219,18 +247,28 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, grap
         return;
       }
 
-      // O callback do FB.login e o FINISH via postMessage não têm ordem
-      // garantida. Aguarda brevemente os IDs quando o callback chega antes,
-      // sem desperdiçar o código de autorização quando o FINISH já chegou.
-      const { wabaId, phoneNumberId } = await waitForSignupAssets(signupAssetsRef);
+      // O callback do FB.login e o FINISH/FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING
+      // via postMessage não têm ordem garantida. Aguarda brevemente os IDs
+      // quando o callback chega antes, sem desperdiçar o código de
+      // autorização quando o evento já chegou.
+      const { wabaId, phoneNumberId, coexistence } = await waitForSignupAssets(signupAssetsRef);
 
-      if (!wabaId || !phoneNumberId) {
+      if (!wabaId || (!phoneNumberId && !coexistence)) {
         toast('Conexão cancelada ou incompleta. Tente novamente.');
         return;
       }
 
-      await connectWhatsappCloud({ code, wabaId, phoneNumberId, registrationPin });
-      toast('WhatsApp oficial conectado com sucesso.');
+      const result = await connectWhatsappCloud({
+        code,
+        wabaId,
+        phoneNumberId,
+        registrationPin: phoneNumberId ? registrationPin : undefined,
+      });
+      toast(
+        result.coexistence
+          ? 'WhatsApp conectado! Seu número continua funcionando no app WhatsApp Business normalmente.'
+          : 'WhatsApp oficial conectado com sucesso.'
+      );
       await onConnected();
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Não foi possível conectar com a Meta agora.');
@@ -258,7 +296,10 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, grap
     <div className="space-y-3">
       <label className="block">
         <span className="text-sm font-semibold text-slate-200">Crie um PIN de segurança</span>
-        <span className="mt-1 block text-xs leading-5 text-slate-500">Use 6 números e guarde este PIN. A Meta poderá solicitá-lo novamente.</span>
+        <span className="mt-1 block text-xs leading-5 text-slate-500">
+          Use 6 números e guarde este PIN. A Meta poderá solicitá-lo novamente. Se seu número já está
+          ativo no app WhatsApp Business, deixe em branco — nesse caso não há PIN.
+        </span>
         <input
           type="password"
           inputMode="numeric"
@@ -266,7 +307,7 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, grap
           value={registrationPin}
           maxLength={6}
           onChange={(event) => setRegistrationPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
-          placeholder="6 números"
+          placeholder="6 números (opcional)"
           aria-label="PIN de segurança do WhatsApp"
           className="mt-2 min-h-11 w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm tracking-[0.35em] text-white outline-none transition placeholder:tracking-normal placeholder:text-slate-600 focus:border-blue-500"
         />
@@ -274,7 +315,7 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, grap
       <button
         type="button"
         onClick={() => void handleClick()}
-        disabled={connecting || !sdkReady || registrationPin.length !== 6}
+        disabled={connecting || !sdkReady || (registrationPin.length > 0 && registrationPin.length !== 6)}
         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#1877F2] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1465CC] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
       >
         <ShieldCheck size={16} /> {connecting ? 'Conectando...' : sdkReady ? 'Conectar com a Meta' : 'Carregando...'}
