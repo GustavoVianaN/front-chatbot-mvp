@@ -439,6 +439,7 @@ export type WhatsAppStatus = {
     embeddedSignupAvailable: boolean;
     metaAppId: string | null;
     metaConfigId: string | null;
+    graphApiVersion: string;
   };
 };
 

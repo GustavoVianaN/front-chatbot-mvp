@@ -187,6 +187,7 @@ export default function WhatsAppStatusPanel({ status, disconnectEvents = [], loa
                   <MetaEmbeddedSignupButton
                     metaAppId={status.cloudApi.metaAppId!}
                     metaConfigId={status.cloudApi.metaConfigId!}
+                    graphApiVersion={status.cloudApi.graphApiVersion}
                     onConnected={onRefresh}
                   />
                 </div>

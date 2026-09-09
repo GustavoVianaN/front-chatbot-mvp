@@ -645,7 +645,7 @@ export async function disconnectWhatsappWeb(): Promise<WhatsAppStatus['web']> {
   });
 }
 
-export async function connectWhatsappCloud(input: { code: string; wabaId: string; phoneNumberId: string }): Promise<{ connected: boolean }> {
+export async function connectWhatsappCloud(input: { code: string; wabaId: string; phoneNumberId: string; registrationPin: string }): Promise<{ connected: boolean }> {
   return apiRequest('/whatsapp-cloud/connect', {
     method: 'POST',
     body: JSON.stringify(input),

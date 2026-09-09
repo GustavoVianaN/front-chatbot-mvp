@@ -8,6 +8,7 @@ import { toast } from '@/components/Toast';
 type MetaEmbeddedSignupButtonProps = {
   metaAppId: string;
   metaConfigId: string;
+  graphApiVersion: string;
   onConnected: () => Promise<void>;
 };
 
@@ -54,6 +55,7 @@ const POPUP_TIMEOUT_MS = 45_000;
 // vez de deixar o botão preso em "Carregando..." pra sempre — foi
 // exatamente esse silêncio que aconteceu no teste.
 const SDK_LOAD_TIMEOUT_MS = 15_000;
+const SIGNUP_ASSETS_TIMEOUT_MS = 5_000;
 
 function loadFacebookSdk(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -62,7 +64,9 @@ function loadFacebookSdk(): Promise<void> {
       return;
     }
 
+    let check: number | undefined;
     const timeout = window.setTimeout(() => {
+      if (check !== undefined) window.clearInterval(check);
       document.getElementById('facebook-jssdk')?.remove();
       reject(new Error('O SDK da Meta não carregou a tempo. Pode ser bloqueador de anúncios/rastreador impedindo o carregamento de connect.facebook.net — desative extensões desse tipo e recarregue a página.'));
     }, SDK_LOAD_TIMEOUT_MS);
@@ -70,7 +74,7 @@ function loadFacebookSdk(): Promise<void> {
     if (document.getElementById('facebook-jssdk')) {
       // Já está carregando (outra instância do componente) — só espera o
       // fbAsyncInit original resolver.
-      const check = window.setInterval(() => {
+      check = window.setInterval(() => {
         if (window.FB) {
           window.clearInterval(check);
           window.clearTimeout(timeout);
@@ -92,6 +96,7 @@ function loadFacebookSdk(): Promise<void> {
     script.defer = true;
     script.crossOrigin = 'anonymous';
     script.onerror = () => {
+      if (check !== undefined) window.clearInterval(check);
       window.clearTimeout(timeout);
       // Remove a tag com falha — sem isso, uma nova tentativa (retry) cairia
       // no ramo "já existe" acima e nunca chegaria a criar um script novo.
@@ -102,11 +107,22 @@ function loadFacebookSdk(): Promise<void> {
   });
 }
 
-export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, onConnected }: MetaEmbeddedSignupButtonProps) {
+async function waitForSignupAssets(ref: { current: { wabaId?: string; phoneNumberId?: string } }) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < SIGNUP_ASSETS_TIMEOUT_MS) {
+    const { wabaId, phoneNumberId } = ref.current;
+    if (wabaId && phoneNumberId) return { wabaId, phoneNumberId };
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+  }
+  return ref.current;
+}
+
+export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, graphApiVersion, onConnected }: MetaEmbeddedSignupButtonProps) {
   const [connecting, setConnecting] = useState(false);
   const [sdkReady, setSdkReady] = useState(false);
   const [sdkError, setSdkError] = useState('');
   const [retryToken, setRetryToken] = useState(0);
+  const [registrationPin, setRegistrationPin] = useState('');
   // Guarda o waba_id/phone_number_id assim que chegam pelo postMessage,
   // para combinar com o "code" do FB.login() quando os dois estiverem
   // disponíveis (a ordem entre os dois eventos não é garantida).
@@ -123,7 +139,7 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, onCo
     loadFacebookSdk()
       .then(() => {
         if (cancelled) return;
-        window.FB?.init({ appId: metaAppId, version: 'v20.0' });
+        window.FB?.init({ appId: metaAppId, version: graphApiVersion });
         setSdkReady(true);
       })
       .catch((error: Error) => {
@@ -134,7 +150,7 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, onCo
     return () => {
       cancelled = true;
     };
-  }, [metaAppId, retryToken]);
+  }, [graphApiVersion, metaAppId, retryToken]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -163,6 +179,11 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, onCo
 
   async function handleClick() {
     if (connecting) return;
+
+    if (!/^\d{6}$/.test(registrationPin)) {
+      toast('Crie um PIN de segurança com exatamente 6 números.');
+      return;
+    }
 
     if (!sdkReady || !window.FB) {
       toast('Ainda carregando o SDK da Meta. Espere um instante e tente de novo.');
@@ -193,14 +214,22 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, onCo
       });
 
       const code = response.authResponse?.code;
-      const { wabaId, phoneNumberId } = signupAssetsRef.current;
-
-      if (!code || !wabaId || !phoneNumberId) {
+      if (!code) {
         toast('Conexão cancelada ou incompleta. Tente novamente.');
         return;
       }
 
-      await connectWhatsappCloud({ code, wabaId, phoneNumberId });
+      // O callback do FB.login e o FINISH via postMessage não têm ordem
+      // garantida. Aguarda brevemente os IDs quando o callback chega antes,
+      // sem desperdiçar o código de autorização quando o FINISH já chegou.
+      const { wabaId, phoneNumberId } = await waitForSignupAssets(signupAssetsRef);
+
+      if (!wabaId || !phoneNumberId) {
+        toast('Conexão cancelada ou incompleta. Tente novamente.');
+        return;
+      }
+
+      await connectWhatsappCloud({ code, wabaId, phoneNumberId, registrationPin });
       toast('WhatsApp oficial conectado com sucesso.');
       await onConnected();
     } catch (error) {
@@ -226,13 +255,30 @@ export default function MetaEmbeddedSignupButton({ metaAppId, metaConfigId, onCo
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => void handleClick()}
-      disabled={connecting || !sdkReady}
-      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#1877F2] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1465CC] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-    >
-      <ShieldCheck size={16} /> {connecting ? 'Conectando...' : sdkReady ? 'Conectar com a Meta' : 'Carregando...'}
-    </button>
+    <div className="space-y-3">
+      <label className="block">
+        <span className="text-sm font-semibold text-slate-200">Crie um PIN de segurança</span>
+        <span className="mt-1 block text-xs leading-5 text-slate-500">Use 6 números e guarde este PIN. A Meta poderá solicitá-lo novamente.</span>
+        <input
+          type="password"
+          inputMode="numeric"
+          autoComplete="new-password"
+          value={registrationPin}
+          maxLength={6}
+          onChange={(event) => setRegistrationPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+          placeholder="6 números"
+          aria-label="PIN de segurança do WhatsApp"
+          className="mt-2 min-h-11 w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm tracking-[0.35em] text-white outline-none transition placeholder:tracking-normal placeholder:text-slate-600 focus:border-blue-500"
+        />
+      </label>
+      <button
+        type="button"
+        onClick={() => void handleClick()}
+        disabled={connecting || !sdkReady || registrationPin.length !== 6}
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#1877F2] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1465CC] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+      >
+        <ShieldCheck size={16} /> {connecting ? 'Conectando...' : sdkReady ? 'Conectar com a Meta' : 'Carregando...'}
+      </button>
+    </div>
   );
 }
