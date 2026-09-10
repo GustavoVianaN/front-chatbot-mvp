@@ -19,7 +19,7 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateBotTestResponse, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getSimulationLogs, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, reviewSimulation, revertSimulationCorrection, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateSettings } from '@/lib/api';
+import { analyzeCompanyIntake, createAutomationRule, createKnowledge, createKnowledgeFile, deleteAutomationRule, disconnectWhatsappWeb, generateBotTestResponse, generateCompanyIntakeClarification, generateCompanyIntakeExample, generateCompanyIntakeFollowUpQuestion, generateCompanyIntakeLearningSummary, getAutomationRules, getBotConfig, getConversations, getCurrentUser, getDashboard, getIntegrationConnections, getKnowledge, getKnowledgeFiles, getKnowledgeSources, getKnowledgeStatus, getProductItems, getSettings, getSimulationLogs, getWhatsappDisconnectEvents, getWhatsappStatus, logout, markOnboardingCompleted, replyToConversation, reviewSimulation, revertSimulationCorrection, startWhatsappWeb, transcribeAudioClip, updateAutomationRule, updateBotConfig, updateConversationBot, updateConversationStatus, updateOnboardingProgress, updateSettings } from '@/lib/api';
 import type { AuthUser, AutomationRule, BotConfig, CompanyIntakeFile, Conversation, IntegrationConnection, KnowledgeDescriptionAudio, KnowledgeFile, KnowledgeItem, KnowledgeSource, KnowledgeStatus, ProductItem, Settings, SimulationLog, WhatsAppDisconnectEvent, WhatsAppStatus } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
@@ -809,7 +809,7 @@ export default function Home() {
     }
 
     if (currentUser && onboardingMode === 'hidden') {
-      setOnboardingStep(1);
+      setOnboardingStep(Math.min(onboardingTotalSteps, Math.max(1, currentUser.onboardingStep || 1)));
       setOnboardingMode('welcome');
     }
   }, [currentUser, currentUser?.onboardingCompleted, dashboard, botConfig, settings, onboardingMode]);
@@ -2399,6 +2399,8 @@ export default function Home() {
       setPending(true);
       try {
         await persistOnboardingConfiguration();
+        const progressUser = await updateOnboardingProgress(6);
+        setCurrentUser(progressUser);
         setOnboardingStep(6);
       } catch (error) {
         toast(error instanceof Error ? error.message : 'Não foi possível preparar o teste do assistente.');
@@ -2408,7 +2410,14 @@ export default function Home() {
       return;
     }
 
-    setOnboardingStep((current) => Math.min(onboardingTotalSteps, current + 1));
+    const nextStep = Math.min(onboardingTotalSteps, onboardingStep + 1);
+    try {
+      const progressUser = await updateOnboardingProgress(nextStep);
+      setCurrentUser(progressUser);
+      setOnboardingStep(nextStep);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Não foi possível salvar o progresso.');
+    }
   };
 
   const handleOnboardingTestImage = (file?: File) => {
@@ -2816,7 +2825,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => {
-                      setOnboardingStep(1);
+                      setOnboardingStep(Math.min(onboardingTotalSteps, Math.max(1, currentUser?.onboardingStep || 1)));
                       setOnboardingMode('wizard');
                     }}
                     className="mx-auto mt-10 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white transition hover:bg-emerald-500 sm:max-w-sm"
@@ -3643,7 +3652,12 @@ export default function Home() {
               <div className="flex flex-col-reverse gap-3 border-t border-[#26344D] bg-[#0F172A] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
                 <button
                   type="button"
-                  onClick={() => onboardingStep === 1 ? setOnboardingMode('welcome') : setOnboardingStep((current) => Math.max(1, current - 1))}
+                  onClick={() => {
+                    if (onboardingStep === 1) return setOnboardingMode('welcome');
+                    const previousStep = Math.max(1, onboardingStep - 1);
+                    setOnboardingStep(previousStep);
+                    void updateOnboardingProgress(previousStep).then(setCurrentUser).catch(() => undefined);
+                  }}
                   className="inline-flex min-h-[52px] items-center justify-center rounded-xl border border-[#26344D] bg-transparent px-6 py-3 text-sm font-semibold text-[#CBD5E1] transition hover:border-[#475569] hover:text-white"
                 >
                   Voltar

@@ -14,6 +14,7 @@ export type AuthUser = {
   status: string;
   companyId?: string | null;
   onboardingCompleted: boolean;
+  onboardingStep: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -465,6 +466,8 @@ export type AccountOverview = {
     subscriptionStatus: 'TRIALING' | 'PENDING_PAYMENT' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
     trialEndsAt: string | null;
     canceledAt: string | null;
+    subscriptionEndsAt: string | null;
+    cancelAtPeriodEnd: boolean;
     deletionRequestedAt: string | null;
     teamMemberLimit: number;
     users: Array<{ id: string; name: string; email: string; status: string; createdAt: string }>;
@@ -478,6 +481,19 @@ export type AccountOverview = {
     trialEndsAt: string | null;
     paymentInstructions: string;
     metrics: Record<string, { used: number; limit: number }>;
+  };
+  billing: {
+    configured: boolean;
+    portalAvailable: boolean;
+    invoices: Array<{
+      id: string;
+      createdAt: string;
+      amountPaid: number;
+      currency: string;
+      status: string | null;
+      hostedInvoiceUrl: string | null;
+      invoicePdf: string | null;
+    }>;
   };
 };
 

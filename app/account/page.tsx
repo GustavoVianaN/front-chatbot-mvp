@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   cancelSubscription,
+  createBillingPortalSession,
   createCheckoutSession,
   exportAccountData,
   getAccountOverview,
@@ -31,6 +32,7 @@ export default function AccountPage() {
   const [notice, setNotice] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [busyAction, setBusyAction] = useState('');
 
   const load = () => {
     void getPlans().then(setPlans).catch(() => undefined);
@@ -41,6 +43,9 @@ export default function AccountPage() {
 
   useEffect(() => {
     void load();
+    const checkout = new URLSearchParams(window.location.search).get('checkout');
+    if (checkout === 'success') setNotice('Pagamento recebido. A ativação será confirmada em instantes.');
+    if (checkout === 'canceled') setNotice('Pagamento cancelado. Nenhuma cobrança foi concluída.');
   }, []);
 
   async function plan(value: 'STARTER' | 'PRO' | 'BUSINESS') {
@@ -51,10 +56,25 @@ export default function AccountPage() {
 
   async function payWithCard(value: 'STARTER' | 'PRO' | 'BUSINESS') {
     try {
+      setBusyAction(`checkout-${value}`);
       const { url } = await createCheckoutSession(value);
       window.location.href = url;
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'Não foi possível iniciar o pagamento por cartão.');
+    } finally {
+      setBusyAction('');
+    }
+  }
+
+  async function manageBilling() {
+    try {
+      setBusyAction('portal');
+      const { url } = await createBillingPortalSession();
+      window.location.assign(url);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Não foi possível abrir a gestão de cobrança.');
+    } finally {
+      setBusyAction('');
     }
   }
 
@@ -108,6 +128,18 @@ export default function AccountPage() {
             <span className="text-sm text-emerald-300">{data.company.subscriptionStatus}</span>
           </div>
 
+          {data.company.cancelAtPeriodEnd && (
+            <div className="mt-5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+              Sua assinatura continuará ativa até {data.company.subscriptionEndsAt ? new Date(data.company.subscriptionEndsAt).toLocaleDateString('pt-BR') : 'o fim do período atual'} e não será renovada.
+            </div>
+          )}
+
+          {data.billing.portalAvailable && (
+            <button type="button" disabled={busyAction === 'portal'} onClick={() => void manageBilling()} className="mt-5 rounded-xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 hover:border-emerald-500 disabled:opacity-60">
+              {busyAction === 'portal' ? 'Abrindo...' : 'Gerenciar cobrança e forma de pagamento'}
+            </button>
+          )}
+
           {data.usage.paymentInstructions && (
             <div className="mt-5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
               <p className="font-semibold">Falta concluir o pagamento</p>
@@ -144,6 +176,7 @@ export default function AccountPage() {
                         <button
                           type="button"
                           onClick={() => void payWithCard(p.plan)}
+                          disabled={Boolean(busyAction)}
                           className="w-full rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
                         >
                           Pagar com cartão
@@ -181,6 +214,7 @@ export default function AccountPage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {Object.entries(data.usage.metrics).map(([key, v]) => (
               <div key={key}>
+                {(() => { const percentage = v.limit ? (v.used / v.limit) * 100 : 100; return percentage >= 80 ? <p className={`mb-2 text-xs font-semibold ${percentage >= 100 ? 'text-rose-300' : 'text-amber-300'}`}>{percentage >= 100 ? 'Limite atingido' : 'Atenção: mais de 80% utilizado'}</p> : null; })()}
                 <div className="flex justify-between text-sm">
                   <span>{data.company.plan === 'TRIAL' && key === 'messages' ? 'Respostas grátis (total)' : METRIC_LABELS[key] || key}</span>
                   <span>{v.used} / {v.limit}</span>
@@ -192,6 +226,21 @@ export default function AccountPage() {
             ))}
           </div>
         </section>
+
+        {data.billing.invoices.length > 0 && (
+          <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="text-xl font-semibold">Histórico de cobranças</h2>
+            <div className="mt-4 divide-y divide-slate-800">
+              {data.billing.invoices.map((invoice) => (
+                <div key={invoice.id} className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm">
+                  <div><p className="font-semibold">{new Date(invoice.createdAt).toLocaleDateString('pt-BR')}</p><p className="text-xs text-slate-400">{invoice.status || 'processando'}</p></div>
+                  <p className="font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: invoice.currency.toUpperCase() }).format(invoice.amountPaid / 100)}</p>
+                  {(invoice.hostedInvoiceUrl || invoice.invoicePdf) && <a href={invoice.hostedInvoiceUrl || invoice.invoicePdf || '#'} target="_blank" rel="noreferrer" className="text-emerald-300 hover:underline">Ver fatura</a>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6">
           <h2 className="text-xl font-semibold">Equipe ({data.company.users.length}/{data.company.teamMemberLimit})</h2>
@@ -213,9 +262,9 @@ export default function AccountPage() {
             <button onClick={() => void exportData()} className="rounded-xl border border-slate-700 px-4 py-3">Exportar meus dados</button>
             <button
               onClick={async () => {
-                await cancelSubscription();
-                setNotice('Assinatura cancelada.');
-                await load();
+                if (!window.confirm('Confirma o cancelamento da renovação da assinatura?')) return;
+                try { await cancelSubscription(); setNotice('Cancelamento registrado. O acesso continuará até o fim do período contratado.'); await load(); }
+                catch (e) { setNotice(e instanceof Error ? e.message : 'Não foi possível cancelar a assinatura.'); }
               }}
               className="rounded-xl border border-amber-600/50 px-4 py-3 text-amber-200"
             >

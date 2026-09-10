@@ -267,6 +267,14 @@ export async function markOnboardingCompleted(): Promise<AuthUser> {
   return payload.user;
 }
 
+export async function updateOnboardingProgress(step: number): Promise<AuthUser> {
+  const payload = await apiRequest<{ success: boolean; user: AuthUser }>('/auth/onboarding-progress', {
+    method: 'PATCH',
+    body: JSON.stringify({ step }),
+  });
+  return payload.user;
+}
+
 export async function getDashboard(): Promise<DashboardSummary> {
   return apiRequest('/dashboard');
 }
@@ -680,6 +688,9 @@ export async function selectAccountPlan(plan: 'TRIAL' | 'STARTER' | 'PRO' | 'BUS
 }
 export async function createCheckoutSession(plan: 'STARTER' | 'PRO' | 'BUSINESS') {
   return apiRequest<{ url: string }>('/account/checkout-session', { method: 'POST', body: JSON.stringify({ plan }) });
+}
+export async function createBillingPortalSession() {
+  return apiRequest<{ url: string }>('/account/billing-portal', { method: 'POST', body: '{}' });
 }
 export async function inviteTeamMember(name: string, email: string) {
   return apiRequest<{ setupLink: string }>('/account/invitations', { method: 'POST', body: JSON.stringify({ name, email }) });
