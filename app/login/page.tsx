@@ -13,6 +13,8 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [accountCreated, setAccountCreated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [verificationPending, setVerificationPending] = useState(false);
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -20,7 +22,21 @@ export default function LoginPage() {
       setAccountCreated(true);
       setEmail(params.get('email') || '');
     }
+    if (params.get('verification') === 'pending') {
+      setVerificationPending(true);
+      setEmail(params.get('email') || '');
+    }
+    if (params.get('verified') === '1') setAccountCreated(true);
   }, []);
+
+  async function resendVerification() {
+    if (!email) return setError('Informe o e-mail da conta.');
+    setResending(true);
+    const response = await fetch('/api/auth/resend-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+    const body = await response.json().catch(() => ({}));
+    setResending(false);
+    setError(response.ok ? body.message : body.error || 'Não foi possível reenviar.');
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -67,6 +83,7 @@ export default function LoginPage() {
             Conta criada com sucesso. Entre com seu e-mail e senha para continuar.
           </div>
         )}
+        {verificationPending && <div role="status" className="mt-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">Conta criada. Abra o link enviado ao seu e-mail antes de entrar.<button type="button" onClick={() => void resendVerification()} disabled={resending} className="mt-2 block font-semibold underline">{resending ? 'Enviando...' : 'Reenviar confirmação'}</button></div>}
         <div className="mt-8 space-y-4">
           <label className="space-y-2 text-sm text-slate-300">
             Email

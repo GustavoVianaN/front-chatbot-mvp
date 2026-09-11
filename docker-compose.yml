@@ -1,6 +1,9 @@
 services:
   bella-frontend:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
     container_name: bella-frontend
     environment:
       NODE_ENV: production

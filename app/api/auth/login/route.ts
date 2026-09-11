@@ -128,7 +128,7 @@ export async function POST(request: Request) {
       backendError,
       durationMs: Date.now() - startedAt,
     });
-    return NextResponse.json({ error: 'Usuário ou senha inválidos.' }, { status: backendResponse.status });
+    return NextResponse.json({ error: backendResponse.status === 403 && backendError ? backendError : 'Usuário ou senha inválidos.' }, { status: backendResponse.status });
   }
 
   const payload = (await backendResponse.json()) as {

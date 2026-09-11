@@ -13,11 +13,11 @@ const securityHeaders = [
       "font-src 'self' data:",
       // connect.facebook.net: SDK JS do "Conectar com a Meta" (Embedded
       // Signup), carregado em components/MetaEmbeddedSignupButton.tsx.
-      `script-src 'self' 'unsafe-inline' https://connect.facebook.net${isDev ? " 'unsafe-eval'" : ''}`,
+      `script-src 'self' 'unsafe-inline' https://connect.facebook.net https://challenges.cloudflare.com${isDev ? " 'unsafe-eval'" : ''}`,
       "style-src 'self' 'unsafe-inline'",
-      "connect-src 'self' https://www.facebook.com https://graph.facebook.com",
+      "connect-src 'self' https://www.facebook.com https://graph.facebook.com https://challenges.cloudflare.com",
       // O diálogo do Embedded Signup roda dentro de um iframe da própria Meta.
-      "frame-src https://www.facebook.com https://web.facebook.com",
+      "frame-src https://www.facebook.com https://web.facebook.com https://challenges.cloudflare.com",
       ...(isDev ? [] : ['upgrade-insecure-requests']),
     ].join('; '),
   },

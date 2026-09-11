@@ -120,6 +120,20 @@ export default function AccountPage() {
         )}
 
         <section className="mt-8 rounded-3xl border border-slate-800 bg-slate-900 p-6">
+          <div className="flex items-center justify-between"><div><p className="text-sm text-slate-400">Ativação</p><h2 className="mt-1 text-xl font-semibold">{data.activation.ready ? 'Conta pronta para atender' : 'Finalize sua configuração'}</h2></div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${data.activation.ready ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-200'}`}>{Object.values(data.activation).filter(Boolean).length - (data.activation.ready ? 1 : 0)}/6</span></div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {[
+              ['E-mail confirmado', data.activation.emailVerified],
+              ['Onboarding concluído', data.activation.onboardingCompleted],
+              ['Base de conhecimento pronta', data.activation.knowledgeReady],
+              ['WhatsApp conectado', data.activation.whatsappConnected],
+              ['Assistente ativado', data.activation.botEnabled],
+              ['Plano liberado', data.activation.billingReady],
+            ].map(([label, done]) => <div key={String(label)} className={`rounded-xl border px-4 py-3 text-sm ${done ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 text-slate-400'}`}>{done ? '✓' : '○'} {label}</div>)}
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-3xl border border-slate-800 bg-slate-900 p-6">
           <div className="flex justify-between">
             <div>
               <p className="text-slate-400">Plano atual</p>

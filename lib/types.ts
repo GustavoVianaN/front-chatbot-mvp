@@ -15,6 +15,8 @@ export type AuthUser = {
   companyId?: string | null;
   onboardingCompleted: boolean;
   onboardingStep: number;
+  companyRole?: 'OWNER' | 'ADMIN' | 'MEMBER' | null;
+  emailVerifiedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -481,6 +483,15 @@ export type AccountOverview = {
     trialEndsAt: string | null;
     paymentInstructions: string;
     metrics: Record<string, { used: number; limit: number }>;
+  };
+  activation: {
+    emailVerified: boolean;
+    onboardingCompleted: boolean;
+    knowledgeReady: boolean;
+    whatsappConnected: boolean;
+    botEnabled: boolean;
+    billingReady: boolean;
+    ready: boolean;
   };
   billing: {
     configured: boolean;

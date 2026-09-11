@@ -2,11 +2,17 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
+import Script from 'next/script';
+
+declare global {
+  interface Window { onBellaTurnstile?: (token: string) => void; }
+}
 
 type FormState = {
   name: string;
   email: string;
   password: string;
+  passwordConfirmation: string;
   companyName: string;
   acceptTerms: boolean;
   acceptPrivacy: boolean;
@@ -26,6 +32,7 @@ export default function SignupPage() {
     name: '',
     email: '',
     password: '',
+    passwordConfirmation: '',
     companyName: '',
     acceptTerms: false,
     acceptPrivacy: false,
@@ -33,12 +40,19 @@ export default function SignupPage() {
   const [message, setMessage] = useState('');
   const [consentError, setConsentError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('acceptTerms') === '1') {
       setForm((current) => ({ ...current, acceptTerms: true }));
     }
+  }, []);
+
+  useEffect(() => {
+    window.onBellaTurnstile = (token: string) => setTurnstileToken(token);
+    return () => { delete window.onBellaTurnstile; };
   }, []);
 
   async function submit(e: FormEvent) {
@@ -53,6 +67,14 @@ export default function SignupPage() {
       );
       return;
     }
+    if (form.password !== form.passwordConfirmation) {
+      setMessage('As senhas não coincidem.');
+      return;
+    }
+    if (turnstileSiteKey && !turnstileToken) {
+      setMessage('Conclua a verificação de segurança.');
+      return;
+    }
 
     setConsentError('');
     setBusy(true);
@@ -60,7 +82,7 @@ export default function SignupPage() {
     const r = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, turnstileToken }),
     });
     const p = await r.json().catch(() => ({}));
     setBusy(false);
@@ -68,7 +90,7 @@ export default function SignupPage() {
       setMessage(p.error || 'Não foi possível criar a conta.');
       return;
     }
-    window.location.href = `/login?registered=1&email=${encodeURIComponent(form.email.trim())}`;
+    window.location.href = `/login?verification=pending&email=${encodeURIComponent(form.email.trim())}`;
   }
 
   return (
@@ -124,6 +146,11 @@ export default function SignupPage() {
               <span className="mt-1.5 block text-xs font-normal text-[#667085]">Mínimo de 10 caracteres</span>
             </label>
 
+            <label className="block text-sm font-semibold text-[#344054]">
+              Confirme a senha
+              <input required type="password" value={form.passwordConfirmation} onChange={(e) => setForm((v) => ({ ...v, passwordConfirmation: e.target.value }))} className={inputClassName} />
+            </label>
+
             <div className="space-y-2.5 pt-1">
               <label className="flex items-start gap-2.5 text-sm text-[#475467]">
                 <input
@@ -165,6 +192,13 @@ export default function SignupPage() {
               </label>
               {consentError && <p id="consent-error" role="alert" className="rounded-lg bg-[#FFF4ED] px-3 py-2 text-sm font-medium text-[#B42318]">{consentError}</p>}
             </div>
+
+            {turnstileSiteKey && (
+              <>
+                <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" />
+                <div className="cf-turnstile" data-sitekey={turnstileSiteKey} data-callback="onBellaTurnstile" data-theme="light" />
+              </>
+            )}
 
             {message && <p className="rounded-xl bg-[#F2F4F7] p-3 text-sm text-[#344054]">{message}</p>}
 
