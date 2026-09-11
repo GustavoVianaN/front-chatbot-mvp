@@ -1,5 +1,53 @@
 # Bella — Frontend (`front-chatbot-mvp`)
 
+## Board permanente de prontidão do produto
+
+O board canônico de evolução da BellAI está na seção **“Board permanente de
+prontidão do produto”** de `../chatbot-mvp/AGENTS.md`. Ele faz parte obrigatória
+do contexto deste frontend: leia-o antes de planejar qualquer evolução,
+auditoria ou deploy.
+
+Ao concluir trabalho relevante no produto, atualize naquele board a nota,
+backlog e histórico datado e replique aqui uma entrada resumida. Nunca marque
+como concluída uma dependência externa sem evidência real.
+
+Estado sincronizado em 2026-09-10: **74/100 — piloto assistido forte, próximo
+de cadastro público controlado; faltam 26 pontos para operação madura em
+escala**.
+
+Prioridades abertas:
+
+- P0: configurar/validar produção, Meta/Coexistence, Stripe, Resend, Turnstile,
+  backup restaurável e destino oficial de deploy do frontend;
+- P1: E2E dos fluxos públicos, alertas/runbooks, painel operacional,
+  comunicações transacionais, suporte/fiscal/jurídico e API oficial como padrão;
+- P2: carga para 10/50/100 empresas, horizontalização, SLOs, custos, rollback,
+  rotação de segredos e recuperação de desastre.
+
+Formato obrigatório de registro no board canônico:
+
+```text
+#### AAAA-MM-DD — título curto
+- Realizado: ...
+- Evidência: testes, comandos, ambiente ou commit ...
+- Board: item concluído/avançado e prioridade ...
+- Nota: NN → NN (+N), ou “sem alteração” ...
+- Falta: próximo risco ou passo verificável ...
+```
+
+Histórico local resumido:
+
+- 2026-09-11: pendências revisadas para produção; backend com type-check, build
+  e 83 testes aprovados após migrations locais. Nota sem alteração (74/100).
+  Falta comprovar deploy/Resend em produção e confirmar destino do frontend.
+
+- 2026-09-10: onboarding/cobrança persistentes e gestão Stripe; nota 66 → 69.
+- 2026-09-10: confirmação de e-mail, Turnstile preparado, OWNER/ADMIN/MEMBER,
+  checklist de ativação e idempotência Stripe; nota 69 → 73. Evidência: 83
+  testes backend, 7 frontend e builds; commits `2b955dc`/`138a6d5`.
+- 2026-09-10: e-mails automáticos de plano ativado, fatura paga e falha de
+  pagamento; nota 73 → 74. Falta validar o Resend em produção.
+
 Painel web do SaaS de atendimento via WhatsApp com IA ("Bella"). Este
 arquivo existe pra qualquer IA (Claude, Codex, Cursor, etc.) entender o
 projeto sem reler tudo do zero. Leia inteiro antes de mexer em qualquer
