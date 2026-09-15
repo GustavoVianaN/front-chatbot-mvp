@@ -43,7 +43,8 @@ Histórico local resumido:
   passaram no GitHub. Frontend salvo em production-readiness, aguardando
   backend antes da publicação. Vercel confirmou previews dessa branch; smoke
   de produção usa production_environment para aceitar nomes personalizados
-  de ambientes Vercel. Nota mantida em 78/100.
+  de ambientes Vercel. CI backend b96b0f9 aprovado integralmente; deploy
+  seguinte confirmou bloqueio por secrets ausentes. Nota mantida em 78/100.
 
 - 2026-09-14: confiabilidade de filas/cobrança, workers distribuídos, painel
   operacional, métricas e deploy com recuperação; nota 74 → 78. Evidência:
