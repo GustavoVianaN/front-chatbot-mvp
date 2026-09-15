@@ -39,7 +39,9 @@ Histórico local resumido:
 
 - 2026-09-14: deploy do backend diagnosticado: cinco secrets LIGHTSAIL_*
   vazios no GitHub; validação explícita adicionada. Publicação depende da
-  configuração do ambiente production. Nota mantida em 78/100.
+  configuração do ambiente production. CI frontend, Chromium e carga/restore
+  passaram no GitHub. Frontend salvo em production-readiness, aguardando
+  backend antes da publicação. Nota mantida em 78/100.
 
 - 2026-09-14: confiabilidade de filas/cobrança, workers distribuídos, painel
   operacional, métricas e deploy com recuperação; nota 74 → 78. Evidência:
