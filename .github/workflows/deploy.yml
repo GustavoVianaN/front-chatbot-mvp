@@ -1,32 +1,16 @@
-name: Deploy production
-
+name: Verify Vercel production
+# O frontend é publicado pela integração Git da Vercel. Não executar SSH.
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-
-concurrency:
-  group: frontend-production
-  cancel-in-progress: false
-
+  deployment_status:
+  workflow_dispatch:
 jobs:
-  deploy:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
     runs-on: ubuntu-latest
-    environment: production
     steps:
-      - name: Configure SSH
+      - name: Check public frontend
         env:
-          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.LIGHTSAIL_KNOWN_HOSTS }}
+          FRONTEND_URL: ${{ vars.FRONTEND_PRODUCTION_URL || 'https://app.gustavoviana.com' }}
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-      - name: Update containers
-        env:
-          HOST: ${{ secrets.LIGHTSAIL_HOST }}
-          USER: ${{ secrets.LIGHTSAIL_USER }}
-          APP_PATH: ${{ secrets.LIGHTSAIL_FRONTEND_PATH }}
-        run: ssh "$USER@$HOST" "cd '$APP_PATH' && git pull --ff-only origin main && docker compose up -d --build --remove-orphans"
+          curl --fail --show-error --retry 3 --max-time 30 "$FRONTEND_URL/login" -o /dev/null
+          curl --fail --show-error --retry 3 --max-time 30 "$FRONTEND_URL/signup" -o /dev/null

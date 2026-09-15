@@ -525,3 +525,16 @@ export type PlanCatalogItem = {
   };
   cardPaymentAvailable: boolean;
 };
+
+export type OperationsSnapshot = {
+  timestamp: string; companies: number; webhooks: Record<string, number>; emails: Record<string, number>;
+  oldestWebhookSeconds: number; oldestEmailSeconds: number; activeWorkers: number; recentDisconnects: number;
+};
+export type OperationsCompany = {
+  id: string; name: string; plan: string; subscriptionStatus: string; monthlyMessageLimit: number;
+  _count: { users: number; contacts: number; conversations: number };
+};
+export type OperationsFailures = {
+  emails: Array<{ id: string; event: string; attempts: number; createdAt: string; expiresAt: string; lastError: string | null }>;
+  webhooks: Array<{ id: string; attempts: number; createdAt: string }>;
+};

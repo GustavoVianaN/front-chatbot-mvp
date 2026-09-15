@@ -700,3 +700,16 @@ export async function requestAccountDeletion(confirmation: string) {
   return apiRequest('/account', { method: 'DELETE', body: JSON.stringify({ confirmation }) });
 }
 export async function exportAccountData() { return apiRequest<Record<string, unknown>>('/account/export'); }
+
+export async function getOperations() {
+  return apiRequest<import('./types').OperationsSnapshot>('/admin/operations');
+}
+export async function getOperationsCompanies(query: string) {
+  return apiRequest<import('./types').OperationsCompany[]>(`/admin/operations/companies?q=${encodeURIComponent(query)}`);
+}
+export async function getOperationsFailures() {
+  return apiRequest<import('./types').OperationsFailures>('/admin/operations/failures');
+}
+export async function retryOperationsJob(kind: 'email' | 'webhook', id: string) {
+  return apiRequest<{ queued: boolean }>(`/admin/operations/retry/${kind}/${encodeURIComponent(id)}`, { method: 'POST' });
+}

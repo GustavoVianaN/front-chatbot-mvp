@@ -10,7 +10,7 @@ export function proxy(request: NextRequest) {
   const isAuthApi = request.nextUrl.pathname.startsWith('/api/auth/');
   const isLoginPage = request.nextUrl.pathname === '/login';
   const isSetupPasswordPage = request.nextUrl.pathname === '/setup-password';
-  const isPublicPage = ['/welcome', '/signup', '/forgot-password', '/legal/terms', '/legal/privacy'].some(
+  const isPublicPage = ['/welcome', '/signup', '/verify-email', '/forgot-password', '/legal/terms', '/legal/privacy'].some(
     (path) => request.nextUrl.pathname === path
   );
 

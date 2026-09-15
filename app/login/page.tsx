@@ -1,13 +1,16 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState, useSyncExternalStore } from 'react';
 
 type LoginResponse = {
   success?: boolean;
   error?: string;
 };
 
+const subscribeHydration = () => () => {};
+
 export default function LoginPage() {
+  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -40,6 +43,9 @@ export default function LoginPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    const submittedEmail = String(fields.get('email') || '').trim();
+    const submittedPassword = String(fields.get('password') || '');
     setSubmitting(true);
     setError('');
 
@@ -52,7 +58,7 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: submittedEmail, password: submittedPassword }),
         signal: controller.signal,
       });
       const result = await response.json().catch(() => ({}) as LoginResponse);
@@ -88,6 +94,8 @@ export default function LoginPage() {
           <label className="space-y-2 text-sm text-slate-300">
             Email
             <input
+              disabled={!hydrated}
+              name="email"
               autoComplete="email"
               maxLength={160}
               type="email"
@@ -99,6 +107,8 @@ export default function LoginPage() {
           <label className="space-y-2 text-sm text-slate-300">
             Senha
             <input
+              disabled={!hydrated}
+              name="password"
               autoComplete="current-password"
               maxLength={120}
               type="password"
@@ -109,7 +119,7 @@ export default function LoginPage() {
           </label>
         </div>
         {error && <div className="mt-4 rounded-2xl border border-rose-600/40 bg-rose-600/10 px-4 py-3 text-sm text-rose-100">{error}</div>}
-        <button type="submit" disabled={submitting} className="mt-6 w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70">
+        <button type="submit" disabled={submitting || !hydrated} className="mt-6 w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70">
           {submitting ? 'Entrando...' : 'Entrar'}
         </button>
         <div className="mt-5 flex justify-between text-sm text-slate-400"><a href="/forgot-password">Esqueci minha senha</a><a href="/signup">Criar conta</a></div>

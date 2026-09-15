@@ -1,4 +1,3 @@
-import type { ComponentType } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 type Section = {
@@ -12,9 +11,10 @@ type SidebarProps = {
   activeSection: string;
   onChange: (section: string) => void;
   companyName: string;
+  isAdmin?: boolean;
 };
 
-export default function Sidebar({ sections, activeSection, onChange, companyName }: SidebarProps) {
+export default function Sidebar({ sections, activeSection, onChange, companyName, isAdmin }: SidebarProps) {
   return (
     <aside className="flex h-full flex-col justify-between px-5 py-6">
       <div className="space-y-8">
@@ -41,6 +41,7 @@ export default function Sidebar({ sections, activeSection, onChange, companyName
               </button>
             );
           })}
+          {isAdmin && <a href="/operations" className="block rounded-2xl px-4 py-3 text-sm text-emerald-300">Operação da plataforma</a>}
         </nav>
       </div>
       <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-4 text-sm text-slate-400">

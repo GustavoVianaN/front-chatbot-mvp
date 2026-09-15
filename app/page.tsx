@@ -3696,7 +3696,7 @@ export default function Home() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-slate-950 pb-24 text-slate-100 lg:pb-0">
       <div className="fixed inset-y-0 left-0 hidden w-80 border-r border-slate-800 bg-slate-950/98 backdrop-blur-xl lg:block xl:w-72">
-        <Sidebar sections={sections} activeSection={activeSection} onChange={handleChangeSection} companyName={companyName} />
+        <Sidebar isAdmin={currentUser?.role === 'ADMIN'} sections={sections} activeSection={activeSection} onChange={handleChangeSection} companyName={companyName} />
       </div>
       <main className="min-h-screen lg:ml-80 xl:ml-72">
         <Topbar companyName={companyName} userName="Admin" status={!whatsappConnected ? 'Indisponível' : dashboard?.botEnabled ? 'Ativo' : 'Pausado'} whatsappConnected={whatsappConnected ? 'Conectado' : 'Não conectado'} onLogout={handleLogout} theme={theme} onToggleTheme={handleToggleTheme} />

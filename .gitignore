@@ -9,3 +9,6 @@ yarn-debug.log*
 yarn-error.log*
 coverage
 tsconfig.tsbuildinfo
+
+/playwright-report/
+/test-results/

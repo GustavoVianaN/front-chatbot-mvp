@@ -11,14 +11,14 @@ Ao concluir trabalho relevante no produto, atualize naquele board a nota,
 backlog e histórico datado e replique aqui uma entrada resumida. Nunca marque
 como concluída uma dependência externa sem evidência real.
 
-Estado sincronizado em 2026-09-10: **74/100 — piloto assistido forte, próximo
-de cadastro público controlado; faltam 26 pontos para operação madura em
-escala**.
+Estado sincronizado em 2026-09-14: **78/100 — base técnica para cadastro
+público controlado, condicionada aos bloqueios P0; faltam 22 pontos**.
+Capacidade em produção ainda não certificada.
 
 Prioridades abertas:
 
 - P0: configurar/validar produção, Meta/Coexistence, Stripe, Resend, Turnstile,
-  backup restaurável e destino oficial de deploy do frontend;
+  backup restaurável e publicação verificada na Vercel/Lightsail;
 - P1: E2E dos fluxos públicos, alertas/runbooks, painel operacional,
   comunicações transacionais, suporte/fiscal/jurídico e API oficial como padrão;
 - P2: carga para 10/50/100 empresas, horizontalização, SLOs, custos, rollback,
@@ -36,6 +36,24 @@ Formato obrigatório de registro no board canônico:
 ```
 
 Histórico local resumido:
+
+- 2026-09-14: deploy do backend diagnosticado: cinco secrets LIGHTSAIL_*
+  vazios no GitHub; validação explícita adicionada. Publicação depende da
+  configuração do ambiente production. Nota mantida em 78/100.
+
+- 2026-09-14: confiabilidade de filas/cobrança, workers distribuídos, painel
+  operacional, métricas e deploy com recuperação; nota 74 → 78. Evidência:
+  90 testes backend, 7 unitários frontend, 2 cenários Chromium, builds e
+  restore local; 100 usuários simultâneos em carga local, zero erros, p95 137 ms.
+  Corrigidos proxy de /verify-email, hidratação do login e confirmação duplicada.
+  Frontend Vercel e backend Lightsail confirmados pelo usuário; publicação e
+  provedores reais ainda pendentes. Ver ../chatbot-mvp/OPERATIONS.md.
+
+- 2026-09-11: auditoria dos documentos e implementação; nota mantida em 74/100.
+  Capacidade para centenas não comprovada: faltam carga, E2E, restore e
+  validação real de produção. Backend com 83 testes, type-check e build
+  aprovados. Riscos adicionais no board canônico: concorrência Stripe,
+  reenvio persistente de e-mails e migrations/smoke test no deploy.
 
 - 2026-09-11: pendências revisadas para produção; backend com type-check, build
   e 83 testes aprovados após migrations locais. Nota sem alteração (74/100).
@@ -85,7 +103,7 @@ Precisa do backend rodando (`../chatbot-mvp`) e de `.env.local` com
 | Rota | O que é |
 |---|---|
 | `/welcome` | **Landing pública** (marketing + preços). É a primeira URL que um cliente novo deveria acessar, não a raiz `/`. Server Component, busca planos via `getPlans()`. |
-| `/signup` | Criação de conta. **Está visualmente abaixo do resto do produto** — formulário simples, sem redirecionamento automático após criar conta, sem confirmação de senha. Candidato a melhoria antes de divulgar tráfego. |
+| `/signup` | Criação de conta com confirmação de senha, consentimentos, Turnstile condicionado à configuração e redirecionamento ao login com aviso de verificação de e-mail. Jornada real ainda precisa de validação E2E. |
 | `/login`, `/forgot-password`, `/setup-password` | Fluxo de autenticação padrão. |
 | `/` (raiz) | **O painel principal, autenticado** — `app/page.tsx`, ~3600 linhas, o maior arquivo do repo. Contém: dashboard, config do bot, base de conhecimento, conversas (inbox com resposta manual + toggle liga/desliga bot), status do WhatsApp, configurações, **e o onboarding guiado** (não é uma rota separada — é um modo dentro deste componente, ativado quando `currentUser.onboardingCompleted === false`). |
 | `/account` | Plano/assinatura, uso do mês, botão "Pagar com cartão" (Stripe) e "Pagar manualmente (PIX)". **Sem link direto no menu principal** — só se chega via Configurações → "Gerenciar conta". |
@@ -169,17 +187,20 @@ esse botão não aparece", checar a config do backend, não o frontend.
 
 ## Deploy — atenção, isso mudou
 
-O `.github/workflows/deploy.yml` + `docker-compose.yml` deste repo fazem
-deploy via SSH pra um host Lightsail (standalone Docker do Next) — mas a
-**produção de verdade hoje roda na Vercel**, com `app.gustavoviana.com`
-(DNS na Cloudflare) apontando pra lá, não pro Lightsail. Antes de mexer em
-deploy, confirme com o usuário qual dos dois é o alvo atual — o pipeline
-Lightsail existe no repo mas pode não ser o que está realmente no ar.
+O destino oficial confirmado pelo usuário é **Vercel**, com
+`app.gustavoviana.com`; o backend é **Lightsail**. O workflow deploy.yml
+verifica HTTP após deployment_status de produção ou disparo manual. A
+publicação é feita pela integração Git da Vercel. Dockerfile/Compose locais
+continuam disponíveis, mas não representam o destino do frontend.
+
+Testes de navegador: `npm run test:e2e:isolated` com os dois repositórios
+irmãos, backend compilado, PostgreSQL local e Chromium instalado. Não usam
+contas reais. E2E com Meta, Stripe, Resend e Turnstile reais segue pendente.
 
 ## Riscos de produto conhecidos (não são bugs a "corrigir")
 
-- `/signup` está abaixo do padrão visual do resto do produto (ver tabela
-  acima) — primeira impressão de um cliente novo.
+- `/signup` precisa de validação E2E com Turnstile e recebimento real de
+  e-mail antes de divulgar tráfego público.
 - WhatsApp Web (Baileys, no backend) é automação não-oficial: risco real
   de banimento do número do cliente pela Meta — comunicar isso é decisão
   de produto, não deste repo, mas afeta o que a UI promete ao cliente.
