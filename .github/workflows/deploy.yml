@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 jobs:
   smoke:
-    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.production_environment == true)
     runs-on: ubuntu-latest
     steps:
       - name: Check public frontend

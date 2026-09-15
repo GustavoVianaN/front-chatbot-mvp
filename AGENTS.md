@@ -41,7 +41,9 @@ Histórico local resumido:
   vazios no GitHub; validação explícita adicionada. Publicação depende da
   configuração do ambiente production. CI frontend, Chromium e carga/restore
   passaram no GitHub. Frontend salvo em production-readiness, aguardando
-  backend antes da publicação. Nota mantida em 78/100.
+  backend antes da publicação. Vercel confirmou previews dessa branch; smoke
+  de produção usa production_environment para aceitar nomes personalizados
+  de ambientes Vercel. Nota mantida em 78/100.
 
 - 2026-09-14: confiabilidade de filas/cobrança, workers distribuídos, painel
   operacional, métricas e deploy com recuperação; nota 74 → 78. Evidência:
