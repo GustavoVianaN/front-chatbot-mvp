@@ -37,6 +37,12 @@ Formato obrigatório de registro no board canônico:
 
 Histórico local resumido:
 
+- 2026-09-15: confirmado em produção que /verify-email redirecionava para
+  /login antes de consumir o token. Publicação da correção já validada em
+  Chromium, liberando a rota pública e evitando confirmação duplicada.
+  Backend é atualizado manualmente pelo usuário no Lightsail; frontend Vercel.
+  Nota mantida em 78/100; confirmação real após publicação ainda pendente.
+
 - 2026-09-14: deploy do backend diagnosticado: cinco secrets LIGHTSAIL_*
   vazios no GitHub; validação explícita adicionada. Publicação depende da
   configuração do ambiente production. CI frontend, Chromium e carga/restore
