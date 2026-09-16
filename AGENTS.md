@@ -225,3 +225,23 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+### 2026-09-15 — teste local da correção AvTec no onboarding
+- Reproduzido localmente: pedido para citar AvTec em uma pergunta iniciada
+  por Ola é classificado como clarify_welcome; resposta seguinte altera
+  welcome_message. Backend reserva resposta determinística para saudação simples.
+- Evidência: duas chamadas reais de IA com configuração sintética simplificada
+  incluíram AvTec; a omissão observada em produção não foi reproduzida.
+  Teste com templates completos foi bloqueado pela revisão automática.
+- Risco identificado: interface compara apenas igualdade textual no reteste;
+  paráfrase não comprova cumprimento da correção. Nenhuma correção publicada.
+- Nota sem alteração (78/100). Falta reproduzir com configuração equivalente
+  à empresa e corrigir classificação/validação sem ignorar a pergunta do cliente.
+
+### 2026-09-15 — reprodução autorizada com templates completos
+- Teste real de IA: AvTec no campo da empresa apareceu em 3/3 respostas;
+  AvTec apenas em welcomeMessage, com empresa fictícia genérica, foi omitido
+  em 2/2. Omissão reproduzida; configuração real da conta não consultada.
+- Evidência: chatbot-mvp/docs/ONBOARDING-REPRO-2026-09-15.md. Sem alteração
+  funcional ou publicação; nota mantida em 78/100. Falta corrigir a aplicação
+  da orientação e a validação do reteste, além de testar fluxo completo.
